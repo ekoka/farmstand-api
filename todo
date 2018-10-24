@@ -1,0 +1,45 @@
+- api:
+    - product pagination
+    - add image to product
+    - how to implement product search
+    - create user account
+    - get authorization key :
+        - post obtain confirmation from provider, then
+        - generate api key and return it
+     
+
+- admin:
+    - add product
+        - upload picture
+    - product listing
+    - product edit 
+        - add category to product
+    - add category
+    - signin : forward to api
+    - login page
+    - logout
+    - user profile
+        - add/remove email
+    - add a custom filter:
+        - definition: Filters are small labels used to categorize products based on specific criteria. For example "Color", "Size", "Category" can be filter types and within each. 
+    - add a custom product template
+
+site:
+-----
+    - product listing
+    - product details
+    - login page
+    - logout
+
+spc:
+----
+- signup page
+- payment page
+- make a landing page
+- make a pricing page
+- tenants admin
+    - list clients
+
+- client admin
+    - account manager:
+        - stripe api for handling recurrent payments

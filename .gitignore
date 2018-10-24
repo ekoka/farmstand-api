@@ -1,0 +1,9 @@
+*.pyc
+.cache
+*config.py
+*config.ini
+gitmsg.gitcommit
+uwsgi.ini
+logs
+*/config/*secret*
+private

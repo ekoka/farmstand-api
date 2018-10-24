@@ -1,0 +1,497 @@
+import functools
+import requests
+from flask import g, request, url_for, current_app as app, jsonify, abort
+from werkzeug import exceptions as werk_exc, Response
+from werkzeug.datastructures import MultiDict
+
+from . import blueprint as bp
+from b2bapi.db import db
+from b2bapi.db.models.accounts import Account, AccountAccessKey as AAccessKey
+from b2bapi.utils.cachelib import json_response
+from b2bapi.utils import abc as uls_abc
+from b2bapi.utils.hal import Resource as Hal
+
+proxy_auth_provider = 'simpleauth'
+# namespace
+proxy_auth_ns = 'simpleauth'
+proxy_auth_url = 'http://simpleauth.local:9898'
+
+def hal():
+    return Hal()._c('simpleb2b', 'https://api.simpleb2b.io/doc/{rel}')
+
+# setting tenant name in urls that expects it during `url_for()`
+@bp.url_defaults
+def set_tenant(endpoint, values):
+    if 'tenant' in values or not getattr(g, 'tenant', None):
+        return
+    if app.url_map.is_endpoint_expecting(endpoint, 'tenant'):
+        values['tenant'] = g.tenant.name
+
+
+# removing tenant name from values matched in the route and storing it in g
+@bp.url_value_preprocessor
+def tenant_extractor(endpoint, values):
+    if 'tenant' not in values:
+        return
+    tenant_name = values.pop('tenant')
+
+    tenant = db.session.execute(
+        'select name, tenant_id from tenants where name = :name', 
+        {'name':tenant_name}).fetchone()
+
+    if tenant is None:
+        raise werk_exc.NotFound('API Not Found')
+
+    g.tenant = tenant
+
+def json_error(status_code, data=None):
+    if data is None:
+        data = {}
+    response = jsonify(data)
+    response.status_code = status_code
+    corsify(response)
+    return response
+
+def json_abort(status_code, data=None):
+    abort(json_error(status_code, data))
+
+def crossorigin(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        if request.method=='OPTIONS':
+            response = app.make_default_options_response()
+        else:
+            response = fnc(*a, **kw)
+        corsify(response)
+        return response
+    return wrapper
+
+def corsify(response):
+    response.headers['Access-Control-Allow-Origin']='*'
+    response.headers[
+        'Access-Control-Allow-Methods']='GET, POST, PUT, DELETE, PATCH, OPTIONS'
+    response.headers[
+        'Access-Control-Allow-Headers']=(
+            'Authorization, Content-Type, Cache-Control, X-Requested-With, '
+            'Location, access-key, Access-Token ')
+    response.headers['Access-Control-Expose-Headers'] = 'Location'
+    return response
+
+@bp.errorhandler(400) # see CATCHALL ROUTE next to this
+@bp.errorhandler(401) # see CATCHALL ROUTE next to this
+@bp.errorhandler(403) # see CATCHALL ROUTE next to this
+@bp.errorhandler(404) # see CATCHALL ROUTE next to this
+@bp.errorhandler(405) # see CATCHALL ROUTE next to this
+@bp.errorhandler(409) # see CATCHALL ROUTE next to this
+def errorhandler(error):
+    """
+    /!\ CAVEAT /!\ 
+    A Blueprint.errorhandler does not catch unmapped resources based on the
+    url_prefix (e.g. all resources routed to /<someprefix>/url as one might 
+    initially believe. It catches errors raise from within the blueprint. That
+    is, once a request has been routed to a view and over the course of that
+    run an error was raised, then the Blueprint errorhandler can intervene.
+
+    Because of this, it might be necessary to create a catchall route for the 
+    Blueprint that receives all unmapped routes based on the prefix and raises
+    404 so that this handler can catch it.
+    """
+    #response = app.response_class(
+    #    json.dumps({'code': 404, 'error': 'Resource Not Found', }), 
+    #    mimetype='application/json',
+    #)
+    #response = corsify(json_abort(404, {'code':404, 'error': 'Not Found'}))
+    response = json_error(
+        error.code, {'code':error.code, 'error': error.description})
+    return response, error.code
+
+@bp.route('/<path:catchall>')
+def catchall(*a, **kw):
+    abort(404)
+
+def parse_keys(multidict):
+    rv = MultiDict()
+    for key, values in multidict.iterlists():
+        keys = key.split('.')
+        obj = rv
+        for index, k in enumerate(keys):
+            if len(keys)==index + 1:
+                # last iteration
+                [obj.add(k, v) for v in values]
+            else:
+                obj = obj.setdefault(k, MultiDict())
+    return rv
+
+
+
+def get_json_data():
+    try:
+        # exception will be raised if content-type is 'application/json'
+        # yet there's nothing in request.json
+        data = request.get_json()
+    except: 
+        json_abort(400, {'error': 'Data should be in JSON'})
+    # if data is None, then content-type != application/json
+    if data is None:
+        json_abort(400, {'error': 'Data expected with Content-Type: '
+                         'application/json'})
+    return data
+
+""" a bunch of params injectors for the router """
+def data_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        data = get_json_data()
+        return fnc(*a, data=data, **kw)
+    return wrapper
+
+def file_injector(fnc, *filenames):
+
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        # OLD APPROACH: files are sent with their metadata
+        # we get the file metadata, if any
+        #request_charset = request.mimetype_params.get('charset')
+        #try:
+        #    data = request.form.get('data')
+        #    if request_charset is not None:
+        #        data = json.loads(data, encoding=request_charset)
+        #    else:
+        #        data = json.loads(data)
+        #except ValueError as e:
+        #    data = None
+        #kw['data'] = data
+
+        # NEW APPROACH: files sent after the metadata
+        # Even though files are always expected to be sent as a bundle,
+        # the route should still provide the names of the different expected
+        # groups of files.
+        for name in filenames:
+            kw[name] = request.files.getlist(name, None)
+        return fnc(*a, **kw)
+
+    return wrapper
+
+def params_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        params = request.args
+        return fnc(*a, params=params, **kw)
+    return wrapper
+
+def lang_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        lang = g.lang
+        return fnc(*a, lang=lang, **kw)
+    return wrapper
+
+def http_access_key_authentication():
+    token = get_access_token()
+    if not token:
+        return
+    #json_expr = {'access_token': token}
+    #acc = Account.query.filter(
+    #    Account.meta.comparator.contains(json_expr)).first()
+    try:
+        access_key = AAccessKey.query.filter(AAccessKey.key==token).one()
+    except Exception as e:
+        return
+    if access_key:
+        g.current_account = access_key.account
+        return True
+
+#def proxy_authentication():
+#    access_token_realms = [f'{proxy_auth_ns}-access-token', 
+#                         f'{proxy_auth_ns}', 
+#                         f'{proxy_auth_ns}accesstoken']
+#    try:
+#        realm, credentials = request.headers.split(' ')
+#        if realm not in access_token_realms:
+#            headers = {}
+#        else:
+#            headers = {'Authorization': f'access_token {credentials}'}
+#    except (KeyError, AttributeError):
+#        headers = {}
+#
+#    params = {}
+#    for rlm in access_token_realms:
+#        access_token = request.args.get(rlm)
+#        if access_token:
+#            params = {'access_token': access_token}
+#            break
+#
+#    resp = requests.get(
+#        proxy_auth_url + '/api/v1/c/simpleb2b/profile', headers=headers, 
+#        params=params)
+#    if resp.status_code==200:
+#        data = resp.json()
+#        email_signin_expr = {
+#            'signins': [
+#                {"type": "password", "email": data['email']}
+#            ]
+#        }
+#        try:
+#            user = U.query.filter(
+#                U.meta.comparator.contains(email_signin_expr)).one()
+#            return True
+#        except:
+#            pass
+
+def get_access_token():
+    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
+    try:
+        scheme, credentials = request.headers['Authorization'].split(' ')
+        if scheme.lower() in access_token_schemes:
+            return  credentials
+        return request.args['access_token']
+    except (ValueError, AttributeError, KeyError):
+        pass
+
+
+def authentication(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        try:
+            authenticated = http_access_key_authentication()
+            #if not authenticated:
+            #    authenticated = proxy_authentication()
+        except (KeyError, AttributeError, ValueError) as e:
+            authenticated = False
+
+        if authenticated:
+            return fnc(*a, **kw)
+        json_abort(
+            401, {
+                'error': 'Unauthenticated: invalid or missing authentication '
+                'token.'})
+    return wrapper
+
+def authorization(fnc, roles):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        authorized = app.config.get('DEV_MODE', False)
+        # if a resource must go through authorization a current_account should
+        # be present in g.
+        acc = g.current_account
+        authorized = acc.authorize(g.tenant, roles, kw) or authorized
+        if authorized:
+            return fnc(*a, **kw)
+        json_abort(403, {'error': 'Forbidden: you do not have access to this '
+                         'resource.'})
+    return wrapper
+
+def account_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        try:
+            kw['account'] = g.current_account
+        except AttributeError:
+            #TODO more specific error type
+            raise Exception('This resource requires an authenticated user.')
+        return fnc(*a, **kw)
+    return wrapper
+
+
+def role_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        try:
+            account = g.current_account
+            kw['role'] = 'admin' if account.authorize(roles=['admin', 'dev'])\
+                                 else None
+        except AttributeError:
+            kw['role'] = None
+        return fnc(*a, **kw)
+    return wrapper
+
+def tenant_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        try:
+            kw['tenant'] = g.tenant
+        except AttributeError:
+            json_abort(404, {'error': 'Not Found'})
+        return fnc(*a, **kw)
+    return wrapper
+
+def auth_injector(fnc):
+    access_token_schemes = ['access_token', 'access-token', 'accesstoken']
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        try:
+            scheme, credentials = request.headers['Authorization'].split()
+            if scheme.lower() in access_token_schemes:
+                kw['auth'] = {
+                    'scheme': 'token',
+                    'token': credentials,
+                }
+            elif scheme.lower()=='basic':
+                try:
+                    username, password = credentials.split(':')
+                except ValueError:
+                    username, password = credentials.split(':'), None
+                kw['auth'] = {
+                    'scheme': 'Basic',
+                    'username': username,
+                    'password': password,
+                }
+
+        except AttributeError:
+            kw['auth'] = None
+        return fnc(*a, **kw)
+    return wrapper
+
+def passthrough_view(fnc, passthrough_url):
+    url = passthrough_url
+    # replaces view function
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        _rv = fnc(*a, **kw) or {}
+        _params, _data = _rv.get('params', {}), _rv.get('data', {})
+        try:
+            data = request.get_json() or {}
+        except:
+            data = {}
+        data.update(_data)
+        params = MultiDict(request.args) 
+        params.update(_params) if params else _params
+        method = request.method
+        headers = dict(request.headers)
+        # /!\ make sure to always remove this when doing something like this
+        headers.pop('Content-Length', None)
+        resp = requests.request(
+            method=method.lower(),
+            url=url, json=data, params=params,
+            headers=headers,
+        )
+        if _rv.get('callback'):
+            return _rv['callback'](resp) or ('passthrough error', 500, [])
+        return resp.json(), resp.status_code, []
+    return wrapper
+
+api_actions = {}
+
+# TODO: temporary until we involve cache, then use cachelib's version
+def json_response_wrapper(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        try:
+            data = fnc(*a, **kw)
+            data, status, headers = data
+        except ValueError as e: # (too many|need more) values to unpack 
+            status, headers = 200, []
+        # we'll assume that only one value was provided
+        return json_response(data, status=status, headers=headers)
+    return wrapper
+
+def route(
+    url_pattern, methods=None, tenanted=True, expects_data=False, 
+    expects_params=False, expects_files=False, authenticate=False, 
+    authorize=None, expects_lang=False, expects_account=False,
+    expects_role=False, expects_tenant=False, expects_auth=False,
+    passthrough=None, cacheable=False, if_match=False, if_none_match=False,
+    endpoint=None):
+    """ function to map  route to function """
+
+    if methods is None: methods = ['GET',]
+
+    def wrapper(fnc):
+        _endpoint = endpoint or fnc.__name__
+        _url_pattern = url_pattern
+        _tenanted = tenanted
+        _methods = methods
+        _authenticate = authenticate
+
+        api_actions[_endpoint] = dict(
+            fnc=fnc, 
+            cacheable=cacheable,
+            methods=_methods,
+            tenanted=_tenanted,
+            expects_account=expects_account, 
+            expects_role=expects_role, 
+            expects_tenant=expects_tenant, 
+            expects_params=expects_params,
+            expects_lang=expects_lang,
+        )
+
+
+        #if cacheable:
+        #    fnc = cache_wrapper(fnc, cache)
+
+        # expects_data and expects_files are mutually exclusive 
+        # having precedence
+
+        #if passthrough:
+        #    fnc = passthrough_view(fnc, passthrough)
+
+        if expects_files:
+            if 'basestring' not in globals():
+                basestring = str
+            if isinstance(expects_files, basestring): 
+                filenames = [expects_files]
+            else: 
+                filenames = expects_files
+            fnc = file_injector(fnc, *filenames)
+        elif expects_data:
+            fnc = data_injector(fnc)
+
+        if expects_params:
+            fnc = params_injector(fnc)
+
+        if expects_lang:
+            fnc = lang_injector(fnc)
+
+        if expects_account:
+            # cannot have account if user not authenticated
+            _authenticate = True
+            fnc = account_injector(fnc)
+
+        if expects_tenant:
+            # tenant are extracted from the route by default, in a preprocessor 
+            # defined earlier in this module. Let's reinject them:
+            fnc = tenant_injector(fnc)
+            _tenanted = True
+
+        if _tenanted:
+            # tenanted is True by default, meaning that routes that do not
+            # require a tenant should explicitly set this to False.
+            # it simply prefixes an url_pattern with the tenant placeholder.
+
+            # It is separate from a the previous option (expects_tenant)
+            # because even though most routes are tenanted, most endpoints do
+            # not expect that information by default.
+            # Splitting these options allows to control these requirements.
+            _url_pattern = '/<tenant>/' + _url_pattern.lstrip('/')
+
+        if expects_role:
+            # cannot have role without authentication
+            _authenticate = True
+            fnc = role_injector(fnc)
+
+        if expects_auth:
+            # cannot pass auth without authentication
+            _authenticate = True
+            fnc = auth_injector(fnc)
+
+        if authorize:
+            # cannot have authz without authn
+            _authenticate = True
+            fnc = authorization(fnc, authorize)
+
+        if _authenticate:
+            fnc = authentication(fnc)
+
+
+        fnc = json_response_wrapper(fnc)
+
+        # crossorigin
+        fnc = crossorigin(fnc)
+        if 'OPTIONS' not in methods:
+            methods.append('OPTIONS')
+
+        bp.add_url_rule(_url_pattern, endpoint=_endpoint, view_func=fnc,
+                               methods=_methods)
+        return fnc
+
+    return wrapper
