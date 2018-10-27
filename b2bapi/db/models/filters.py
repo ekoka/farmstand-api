@@ -33,19 +33,29 @@ class Filter(db.Model, db.TenantMixin):
     """
 
     __table_args__ = (
-        db.ForeignKeyConstraint([filter_set_id, 'tenant_id'], 
-                                ['filter_sets.filter_set_id', 'filter_sets.tenant_id'],
-                                'filters_filter_set_id_fkey'),
-        db.ForeignKeyConstraint([parent_id, 'tenant_id'], 
-                                ['filters.filter_id', 'filters.tenant_id'],
-                                'filters_filter_id_fkey'),
+        db.ForeignKeyConstraint(
+            [filter_set_id, 'tenant_id'], 
+            ['filter_sets.filter_set_id', 'filter_sets.tenant_id'],
+            'filters_filter_set_id_fkey',),
+        db.ForeignKeyConstraint(
+            [parent_id, 'tenant_id'], 
+            ['filters.filter_id', 'filters.tenant_id'],
+            'filters_filter_id_fkey' ),
     )
 
     parent = db.relationship(
         'Filter', backref='children',
-        remote_side='[Filter.filter_id, Filter.tenant_id]')
+        remote_side='[Filter.filter_id, Filter.tenant_id]', viewonly=True)
 
     filter_set = db.relationship('FilterSet', backref='filters')
+
+    primaryjoin=("(Filter.filter_id==foreign(ProductFilter.filter_id))&"
+                 "(Filter.tenant_id==foreign(ProductFilter.tenant_id))") 
+    secondaryjoin=("(Product.product_id==foreign(ProductFilter.product_id))&"
+                 "(Product.tenant_id==ProductFilter.tenant_id)") 
+    products = db.relationship(
+        'Product', secondary="products_filters", primaryjoin=primaryjoin, 
+        secondaryjoin=secondaryjoin, backref="filters")
 
 
 class ProductFilter(db.Model, db.TenantMixin):
@@ -55,10 +65,18 @@ class ProductFilter(db.Model, db.TenantMixin):
     filter_id = db.Column(None, primary_key=True)
 
     __table_args__ = (
-        db.ForeignKeyConstraint([filter_id, 'tenant_id'], 
-                                ['filters.filter_id', 'filters.tenant_id'],
-                                'products_filters_filter_id_fkey'),
-        db.ForeignKeyConstraint([product_id, 'tenant_id'],
-                                ['products.product_id', 'products.tenant_id'],
-                                'products_filters_product_id_fkey'),
+        db.ForeignKeyConstraint(
+            [filter_id, 'tenant_id'], 
+            ['filters.filter_id', 'filters.tenant_id'],
+            'products_filters_filter_id_fkey', ondelete='CASCADE',
+        ), 
+        db.ForeignKeyConstraint(
+            [product_id, 'tenant_id'],
+            ['products.product_id', 'products.tenant_id'],
+            'products_filters_product_id_fkey', ondelete='CASCADE',
+        ),
     )
+
+    #products = db.relationship(
+    #    'Product', backref=db.backref("product_filters", cascade="all,delete-orphan"))
+    #filters = db.relationship('Filter', backref="filter_products")

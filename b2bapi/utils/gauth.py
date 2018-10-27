@@ -55,8 +55,6 @@ class GAuth:
 
             if idinfo['iss'] not in issuers:
                 raise ValueError('Wrong issuer.')
-
-            app.logger.info(idinfo)
             return idinfo
         except ValueError:
             # Invalid token

@@ -8,10 +8,12 @@ from vino import errors as vno_err
 
 from b2bapi.db import db
 from b2bapi.db.models.products import Product, ProductSchema as PSchema
+from b2bapi.db.models.filters import Filter
 from b2bapi.utils.uuid import clean_uuid
 from ._route import route, json_abort, hal
 
 from .validation.products import (add_product, edit_product)
+from .filters import _get_filter_resource
 
 
 # ------------------------ Products ------------------------ # 
@@ -36,18 +38,20 @@ def get_products(params, tenant):
 
 def _get_product_resource(p, partial=True):
     rv = hal()
-    rv._l('self', url_for('api.get_product', product_id=p.product_id))
+    rv._l('self', url_for('api.get_product', product_id=p.product_id,
+                          partial=partial))
     rv._k('product_id', p.product_id.hex)
-    rv._k('available', p.available)
-    rv._k('visible', p.visible)
     if partial:
-        rv._k('partial', True)
+        rv._k('partial', partial)
         rv._k('fields', [f.get('en') 
                          for f in p.data.setdefault('fields', [])[:3]])
     else:
+        rv._k('available', p.available)
+        rv._k('visible', p.visible)
         rv._k('fields', [f.get('en') for f in p.data.setdefault('fields', [])])
         rv._k('unit_price', p.data.get('unit_price'))
         rv._k('quantity_unit', p.data.get('quantity_unit'))
+        rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
     return rv.document
 
 def _get_product(product_id, tenant_id):
@@ -60,10 +64,14 @@ def _get_product(product_id, tenant_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
-@route('/products/<product_id>', authenticate=True, expects_tenant=True)
-def get_product(product_id, tenant):
+@route('/products/<product_id>', authenticate=True, expects_tenant=True,
+       expects_params=True)
+def get_product(product_id, tenant, params):
+    # in the meantime, while waiting for validation
+    partial = int(params.get('partial', False))
+    app.logger.info(partial)
     product = _get_product(product_id, tenant.tenant_id)
-    document = _get_product_resource(product, partial=False)
+    document = _get_product_resource(product, partial=partial)
     return document, 200, []
 
 
@@ -97,8 +105,9 @@ def db_flush():
     try:
         db.session.flush()
     except sql_exc.IntegrityError as e:
+        raise
         db.session.rollback()
-        json_abort(400, {'error': 'Could not save record. Try again later.'})
+        json_abort(400, {'error': 'Could not save record. Verify format.'})
 
 @route('/products', methods=['POST'], expects_data=True, authenticate=True,
        expects_tenant=True)
@@ -110,6 +119,8 @@ def post_product(data, tenant):
     #    abort(400, 'Invalid data ' + str(e))
 
     # while we're waiting for proper validation
+    filters = data.pop('filters', [])
+
     data['data'] = {
         'quantity_unit' : data.pop('quantity_unit', None),
         'unit_price' : data.pop('unit_price', None),
@@ -118,9 +129,12 @@ def post_product(data, tenant):
     data['tenant_id'] = tenant.tenant_id
 
     p = Product(**data)
+
+    for f in filters:
+        p.product_filters.append(ProductFilter(filter_id=f.filter_id))
     db.session.add(p)
     db_flush()
-    location = url_for('api.get_product', product_id=p.product_id)
+    location = url_for('api.get_product', product_id=p.product_id, partial=False)
     rv = hal()
     rv._l('location', location)
     rv._k('product_id', p.product_id)
@@ -133,8 +147,9 @@ def put_product(product_id, data, tenant):
     # data = edit_product.validate(data)
     p = _get_product(product_id, tenant.tenant_id)
 
+    filters = data.pop('filters', [])
     fields = data.pop('fields', [])
-    data.pop('data')
+    data.pop('data', None)
     p.populate(**data)
 
     try:
@@ -147,7 +162,9 @@ def put_product(product_id, data, tenant):
                 p.data.setdefault('fields', []).append(val)
     except:
         json_abort(400, {'error':'Bad Format'})
- 
+
+    p.filters = Filter.query.filter(Filter.filter_id.in_(filters)).all()
+
     db_flush()
     return {}, 200, []
 

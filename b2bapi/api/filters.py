@@ -40,6 +40,7 @@ def _get_filter_set_resource(fs, partial=False):
     #    'api.post_filter', filter_set_id=fs.filter_set_id))
     rv._k('filter_set_id', fs.filter_set_id)
     rv._k('label', fs.data.setdefault('label', {'en':None}).get('en'))
+    rv._k('multichoice', fs.data.setdefault('multichoice', True))
     if not partial:
         rv._embed('filters', [
             _get_filter_resource(f, partial=True) for f in fs.filters])
@@ -61,7 +62,6 @@ def post_filter(filter_set_id, data, tenant):
 
     # TODO: validate to remove filter_id, parent_id from meta
     f = Filter()
-    app.logger.info(f.data)
     # the remainder should go into JSON data field
     #for k,v in data.items():
     #    f.data[k] = v
@@ -79,7 +79,7 @@ def post_filter(filter_set_id, data, tenant):
     rv._k('status_code', status_code)
     rv._k('status', 'created')
     rv._l('location', location)
-    rv._embed('resource',  _get_filter_resource(f, partial=True))
+    rv._embed('resource', _get_filter_resource(f, partial=True))
     return rv.document, status_code, [('Location', location)]
 
 def _get_filter_resource(f, partial=False):
@@ -87,10 +87,12 @@ def _get_filter_resource(f, partial=False):
     rv._l('self', url_for('api.get_filter', filter_id=f.filter_id))
     rv._k('filter_id', f.filter_id)
     rv._k('label', f.data.setdefault('label',{'en':None}).get('en'))
-    rv._k('level', f.level)
     if f.parent:
         rv._embed('parent', _get_filter_resource(f.parent, partial=True))
-    if not partial:
+    if partial:
+        rv._k('partial', True)
+    else:
+        rv._k('level', f.level)
         rv._embed('filter_set', _get_filter_set_resource(f.filter_set, partial=True))
         rv._l('simpleb2b:products', url_for('api.get_products', filter=f.filter_id))
     return rv.document
