@@ -19,7 +19,6 @@ from b2bapi.utils.gauth import GAuth
 def logger(*a, **kw):
     return app.config['LOGGER'].info(*a, **kw)
 
-ggauth = GAuth()
 
 def generate_key(length=24):
     return secrets.token_urlsafe(length)
@@ -218,9 +217,12 @@ def post_account(data):
         return doc, code, headers
 
 def _verify_auth_token(data):
+    ggauth = GAuth(
+        client_id=app.config['GOOGLE_CLIENT_ID'], 
+        secret=app.config['GOOGLE_SECRET'], 
+        redirect_uri=app.config['GOOGLE_REDIRECT_URI'])
     if not data.get('token'):
         json_abort(401, {'error':'Missing authentication token'})
-    #token = ggauth.get_access_token(data['code'])
 
     if not data.get('provider'):
         abort(401, 'Missing authentication provider')

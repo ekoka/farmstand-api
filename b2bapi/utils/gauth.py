@@ -10,26 +10,25 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as gauth_requests
 
 class GAuth:
-    default_providers = ('google', 'microsoft', 'linkedin', 'facebook')
-    CONFIG = {
-        'client_id' : ('599748317391-pbhmepmam968t0ppfm43afs12i2jotlq.'
-                        'apps.googleusercontent.com'),
-        'secret': 'FZ9_obFHhGNijCx0rqLt2P4S',
-        'auth_uri' : 'https://accounts.google.com/o/oauth2/v2/auth',
-        'redirect_uri': 'http://localhost:8080',
-        'params_template' : {
-            'client_id' : None,
-            'response_type' : 'code',
-            'scope' : 'openid email',
-            'nonce' : '',
-            #'login_hint' : '',
-        },
-        'discovery': {
-            'uri': ('https://accounts.google.com/.well-known'
-                    '/openid-configuration'),
-            'document': None,
+    def __init__(client_id, secret, redirect_uri='localhost:8080'):
+        self.CONFIG = {
+            'client_id' : client_id,
+            'secret': secret,
+            'auth_uri' : 'https://accounts.google.com/o/oauth2/v2/auth',
+            'redirect_uri': redirect_uri,
+            'params_template' : {
+                'client_id' : None,
+                'response_type' : 'code',
+                'scope' : 'openid email',
+                'nonce' : '',
+                #'login_hint' : '',
+            },
+            'discovery': {
+                'uri': ('https://accounts.google.com/.well-known'
+                        '/openid-configuration'),
+                'document': None,
+            }
         }
-    }
 
     @property
     def document():
