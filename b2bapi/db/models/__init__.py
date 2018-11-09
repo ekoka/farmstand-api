@@ -43,9 +43,11 @@ class TenantMixin(object):
 db.TenantMixin = TenantMixin
 
 from . import (
+    signins,
     tenants,
     products,
     filters,
     images,
     accounts,
+    inquiries,
 )

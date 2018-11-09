@@ -43,43 +43,43 @@ class AccountEmail(db.Model):
     account = db.relationship(
         'Account', backref=db.backref("emails", order_by='AccountEmail.primary'))
 
-"""
-- Each email can be linked to multiple profiles.
-"""
-class Profile(db.Model):
-
-    __tablename__ = 'profiles'
-
-    profile_id = db.Column(db.UUID, primary_key=True, default=uuid4)
-    account_email_id = db.Column(
-        None, db.ForeignKey('account_emails.account_email_id'), nullable=False)
-    profile_name = db.Column(db.Unicode)
-    first_name = db.Column(db.Unicode)
-    middle_name = db.Column(db.Unicode)
-    last_name = db.Column(db.Unicode)
-    title = db.Column(db.Unicode) # Mr, Mrs, Dr, Pr
-    company = db.Column(db.Unicode)
-    role = db.Column(db.Unicode) # CEO, CTO
-    contact = db.Column(db.JSONB)
-    """
-    phone:
-        mobile:
-        work:
-    address1
-    address2
-    city
-    state_province
-    zip_postal_code
-    country
-    """
-    preferred_languages = db.Column(db.JSONB)
-    data = db.Column(db.JSONB)
-    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
-    # is primary profile for this account
-    is_primary = db.Column(db.Boolean, default=False) 
-
-    # relationships
-    email = db.relationship('AccountEmail', backref='profiles')
+#"""
+#- Each email can be linked to multiple profiles.
+#"""
+#class Profile(db.Model):
+#
+#    __tablename__ = 'profiles'
+#
+#    profile_id = db.Column(db.UUID, primary_key=True, default=uuid4)
+#    account_email_id = db.Column(
+#        None, db.ForeignKey('account_emails.account_email_id'), nullable=False)
+#    profile_name = db.Column(db.Unicode)
+#    first_name = db.Column(db.Unicode)
+#    middle_name = db.Column(db.Unicode)
+#    last_name = db.Column(db.Unicode)
+#    title = db.Column(db.Unicode) # Mr, Mrs, Dr, Pr
+#    company = db.Column(db.Unicode)
+#    role = db.Column(db.Unicode) # CEO, CTO
+#    contact = db.Column(db.JSONB)
+#    """
+#    phone:
+#        mobile:
+#        work:
+#    address1
+#    address2
+#    city
+#    state_province
+#    zip_postal_code
+#    country
+#    """
+#    preferred_languages = db.Column(db.JSONB)
+#    data = db.Column(db.JSONB)
+#    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
+#    # is primary profile for this account
+#    is_primary = db.Column(db.Boolean, default=False) 
+#
+#    # relationships
+#    email = db.relationship('AccountEmail', backref='profiles')
 
 
 #class AccountUnverifiedEmail(db.Model):

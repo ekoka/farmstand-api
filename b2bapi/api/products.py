@@ -203,23 +203,33 @@ def filtered_query(q, filters):
 
 def _set_default_product_schema(tenant_id):
     ps = PSchema.query.get(tenant_id)
-    if not ps:
-        try:
-            ps = PSchema(product_schema_id=tenant_id)
-            db.session.add(ps)
-            db.session.flush()
-        except Exception as e:
-            db.session.rollback()
-            json_abort(401, {})
-    return ps
+    if ps:
+        return ps
+    try:
+        ps = PSchema(product_schema_id=tenant_id)
+        db.session.add(ps)
+        db.session.flush()
+        return ps
+    except Exception as e:
+        db.session.rollback()
+        json_abort(401, {})
 
 @route('/product-schema', authenticate=True, expects_tenant=True)
 def get_product_schema(tenant):
     ps = _set_default_product_schema(tenant.tenant_id)
     rv = hal()
     rv._l('self', url_for('api.get_product_schema'))
-    for k,v in ps.data.items():
-        rv._k(k, v)
+
+    #for k,v in ps.data.items():
+
+    def getitem(l, i, default):
+        try:
+            return l[i]
+        except:
+            return default
+
+    rv._k('fields', [
+        getitem(ps.data.setdefault('fields', []), i, None) for i in range(5)])
     return rv.document, 200, []
    
 @route('/product-schema', methods=['PUT'], authenticate=True, 

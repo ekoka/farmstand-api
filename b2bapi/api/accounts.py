@@ -4,8 +4,9 @@ from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
 
+from b2bapi.db.models.signins import Signin
 from b2bapi.db.models.accounts import (
-    Account, AccountEmail, Profile, AccountAccessKey)
+    Account, AccountEmail, AccountAccessKey) #, Profile)
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
@@ -190,14 +191,13 @@ def post_account(data):
 
     def _rv(_acc, _code): 
         return ({
-            'error': 'Existing account.',
             '_links': {
                 'curies': [{
                     'name': 'simpleb2b',
                     'href': 'https://api.simpleb2b.io/docs/{rel}',
                     'templated': True,
                 }],
-                'simpleb2b:account': {'href': url_for(
+                'location': {'href': url_for(
                     'api.get_account', account_id=_acc.account_id)},
                 'simpleb2b:access_key': {'href': url_for('api.get_access_key')}
             },
@@ -213,11 +213,13 @@ def post_account(data):
     except sql_exc.IntegrityError as e:
         email = AccountEmail.query.filter_by(
             email=token_data.get('email')).first()
-        return _rv(email.account, 409)
+        doc, code, headers =  _rv(email.account, 409)
+        doc['error'] = 'Existing account.'
+        return doc, code, headers
 
 def _verify_auth_token(data):
     if not data.get('token'):
-        abort(401, 'Missing authentication token')
+        json_abort(401, {'error':'Missing authentication token'})
     #token = ggauth.get_access_token(data['code'])
 
     if not data.get('provider'):
@@ -226,6 +228,25 @@ def _verify_auth_token(data):
     if data['provider'].lower()=='google':
         return ggauth.verify_token(data['token'])
     elif data['provider'].lower()=='simpleb2b':
+        #token_expr = {"tokens": [{"type": "activation_token", 
+        #                        "status": "active"}]}
+        token_expr = {"tokens": [{
+            "token": data['token'], 
+            "status": "active",
+            "type": "activation_token",
+        }]}
+        s = Signin.query.filter(
+            Signin.meta.comparator.contains(token_expr)).one()
+        for t in s.meta['tokens']:
+            if t['type']=='activation_token' and t['token']==data['token']:
+                t['status'] = 'active'
+        return {
+            'email': s.email, 
+            'first_name': s.data.get('first_name'),
+            'last_name': s.data.get('last_name'),
+            'lang': s.data.get('lang', 'en'),
+            'email_verified': True,
+        }
         # TODO add sbauth as an auth provider
         # return sbauth.verify_token(data['token'])
         pass
@@ -235,10 +256,10 @@ def _verify_auth_token(data):
 
 def create_account_from_auth_token(profile):
     account = Account(**{
-        'first_name': profile.get('given_name'),
-        'last_name': profile.get('family_name'),
+        'first_name': profile.get('given_name') or profile.get('first_name'),
+        'last_name': profile.get('family_name') or profile.get('last_name'),
         'email': profile['email'],
-        'lang': profile.get('locale'),
+        'lang': profile.get('locale', None) or profile.get('lang', 'en'),
     })
     email = AccountEmail(**{
         'email': account.email,
@@ -248,17 +269,17 @@ def create_account_from_auth_token(profile):
         # enable login attempts with this email in the future
         'login': True, 
     })
-    profile = Profile(**{
-        'profile_name': 'default',
-        'first_name': account.first_name,
-        'last_name': account.last_name,
-    })
+    #profile = Profile(**{
+    #    'profile_name': 'default',
+    #    'first_name': account.first_name,
+    #    'last_name': account.last_name,
+    #})
     access_key = AccountAccessKey(**{
         'key': generate_key(24),
     })
 
     account.access_key = access_key
-    profile.email = email
+    #profile.email = email
     email.account = account
 
     try:

@@ -43,11 +43,13 @@ def post_tenant(data, account):
             'error': f'The chosen company identifier "{name}"'
             ' is already taken, try a different one.'})
 
-    tenant_resource = _get_tenant_resource(tenant, partial=True)
-    tenant_url = tenant_resource['_links']['self']['href']
+    #tenant_resource = _get_tenant_resource(tenant, partial=True)
+    #tenant_url = tenant_resource['_links']['self']['href']
     rv = hal()
-    rv._l('simpleb2b:tenant', tenant_url)
-    rv._embed('tenant', _get_tenant_resource(tenant, partial=True))
+
+    tenant_url = url_for('api.get_tenant', tname=tenant.name)
+    rv._l('location', tenant_url)
+    #rv._embed('tenant', _get_tenant_resource(tenant, partial=True))
     return rv.document, 201, [('Location', tenant_url)]
 
 
@@ -59,12 +61,14 @@ def _get_tenant_resource(tenant, partial=False):
     products_url = url_for('api.get_products', tenant=tenant.name)
     product_url = url_for('api.get_product', tenant=tenant.name, 
                           product_id='{product_id}')
+    inquiries_url = url_for('api.get_inquiries', tenant=tenant.name)
     rv = hal()._l('self', tenant_url)
     rv._k('name', tenant.name)
     rv._l('simpleb2b:account', account_url)
     rv._l('simpleb2b:product_schema', product_schema_url)
     rv._l('simpleb2b:filter_sets', filter_set_url)
     rv._l('simpleb2b:products', products_url)
+    rv._l('simpleb2b:inquiries', inquiries_url)
     rv._l('simpleb2b:product', product_url, unquote=True, templated=True )
     if partial:
         return rv._k('_partial', True).document

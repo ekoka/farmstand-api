@@ -6,6 +6,7 @@ from werkzeug import ImmutableDict, exceptions as exc
 from flask import (
     Flask, request, g, session, current_app, logging as flask_logging,
     ctx)
+import dramatiq
 from flask_sqlalchemy import SQLAlchemy
 from flask_babelex import Babel
 
@@ -24,6 +25,8 @@ def make_app(config_obj=None):
         import_name=__name__, static_folder='../static', 
         static_url_path='/static', )
     app.config.from_object(config_obj)
+
+    dramatiq.flask_app = app
 
     # Babel: i10n & i18n
     babel = Babel(app)
