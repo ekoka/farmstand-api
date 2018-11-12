@@ -18,10 +18,8 @@ def send_activation_email():
     new_signins = Signin.query.filter(
         Signin.meta.comparator.contains(token_expr)).all()
 
-    app.logger.info('called send_activation_email')
 
     for s in new_signins:
-        app.logger.info('entered loop')
         for t in s.meta['tokens']:
             if t['type']=='activation_token' and t['status']=='new':
                 token = t
@@ -30,9 +28,7 @@ def send_activation_email():
         # activation token
         lang = token.get('lang', 'en')
         activation_url = dramatiq.flask_app.config['ACTIVATION_URL']
-        app.logger.info(activation_url)
         activation_url = activation_url.format(token=token['token'], lang=lang)
-        app.logger.info(activation_url)
         content = (f"Your e-mail address was recently used to sign-up to "
                    f"SimpleB2B.app. Click here to activate your account "
                    f"{activation_url}")
