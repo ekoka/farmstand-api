@@ -10,7 +10,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as gauth_requests
 
 class GAuth:
-    def __init__(client_id, secret, redirect_uri='localhost:8080'):
+    def __init__(self, client_id, secret, redirect_uri='localhost:8080'):
         self.CONFIG = {
             'client_id' : client_id,
             'secret': secret,
