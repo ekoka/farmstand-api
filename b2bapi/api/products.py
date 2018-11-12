@@ -207,6 +207,8 @@ def _set_default_product_schema(tenant_id):
         return ps
     try:
         ps = PSchema(product_schema_id=tenant_id)
+
+        ps.data['fields'] =  [None for i in range(5)]
         db.session.add(ps)
         db.session.flush()
         return ps
@@ -222,14 +224,14 @@ def get_product_schema(tenant):
 
     #for k,v in ps.data.items():
 
-    def getitem(l, i, default):
+    def getitem(l, i, default=None):
         try:
             return l[i]
         except:
+            l.append(default)
             return default
 
-    rv._k('fields', [
-        getitem(ps.data.setdefault('fields', []), i, None) for i in range(5)])
+    rv._k('fields', ps.data['fields'])
     return rv.document, 200, []
    
 @route('/product-schema', methods=['PUT'], authenticate=True, 
