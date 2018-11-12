@@ -18,7 +18,10 @@ def send_activation_email():
     new_signins = Signin.query.filter(
         Signin.meta.comparator.contains(token_expr)).all()
 
+    app.logger.info('called send_activation_email')
+
     for s in new_signins:
+        app.logger.info('entered loop')
         for t in s.meta['tokens']:
             if t['type']=='activation_token' and t['status']=='new':
                 token = t
