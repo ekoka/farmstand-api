@@ -14,13 +14,13 @@ def send(subject, content, to):
 def send_activation_email():
     app = dramatiq.flask_app
     token_expr = {"tokens": [{"type": "activation_token", 
-                              "status": "pending"}]}
-    pending_signins = Signin.query.filter(
+                              "status": "new"}]}
+    new_signins = Signin.query.filter(
         Signin.meta.comparator.contains(token_expr)).all()
 
-    for s in pending_signins:
+    for s in new_signins:
         for t in s.meta['tokens']:
-            if t['type']=='activation_token' and t['status']=='pending':
+            if t['type']=='activation_token' and t['status']=='new':
                 token = t
                 break
         # TODO: move activation_url_template in config and set lang inside 
@@ -44,7 +44,7 @@ def send_activation_email():
                  content=content, to=to)
             # activate token
             #s.meta['tokens'][i]['status'] = 'active'
-            token['status'] = 'sent'
+            token['status'] = 'pending'
             db.session.commit()
         except:
             raise
@@ -55,13 +55,13 @@ def send_activation_email():
 @dramatiq.actor(actor_name='simpleb2b.send_password_reset_email')
 def send_password_reset_email():
     token_expr = {"tokens": [{"type": "reset_token", 
-                              "status": "pending"}]}
-    pending_signins = Signin.query.filter(
+                              "status": "new"}]}
+    new_signins = Signin.query.filter(
         Signin.meta.comparator.contains(token_expr)).all()
 
-    for s in pending_signins:
+    for s in new_signins:
         for i, t in enumerate(s.meta['tokens']):
-            if t['type']=='reset_token' and t['status']=='pending':
+            if t['type']=='reset_token' and t['status']=='new':
                 token = t
                 break
         lang = token['lang']
@@ -74,7 +74,7 @@ def send_password_reset_email():
         try:
             send(subject='Password Reset', content=content, to=to)
             # activate token
-            s.meta['tokens'][i]['status'] = 'active' 
+            s.meta['tokens'][i]['status'] = 'active'
             db.session.commit()
         except:
             pass

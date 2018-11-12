@@ -234,7 +234,7 @@ def _verify_auth_token(data):
         #                        "status": "active"}]}
         token_expr = {"tokens": [{
             "token": data['token'], 
-            "status": "active",
+            "status": "pending",
             "type": "activation_token",
         }]}
         s = Signin.query.filter(

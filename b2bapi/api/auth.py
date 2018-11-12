@@ -36,7 +36,7 @@ def post_signin(data):
         signin = Signin(email=email, password=password, data=data, meta={})
         #signin.password = password
         signin.set_token(
-            token_type='activation_token', status='pending', lang='en')
+            token_type='activation_token', status='new', lang='en')
         db.session.add(signin)
         db.session.flush()
     except sql_exc.IntegrityError as e:
@@ -145,7 +145,7 @@ def post_signin(data):
 #            token_type='activation_token', 
 #            activation_url_template=data['activation_url_template'],
 #            lang=data.get('lang', 'en'),
-#            status='pending',
+#            status='new',
 #        )
 #        db.session.flush()
 #    except:
@@ -226,7 +226,7 @@ def post_signin(data):
 #        token_type='reset_token',
 #        reset_url_template=data['reset_url_template'],
 #        lang=data['lang'],
-#        status='pending',
+#        status='new',
 #    )
 #    try:
 #        db.session.flush()
