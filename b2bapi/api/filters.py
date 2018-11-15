@@ -8,7 +8,7 @@ from vino import errors as vno_err
 
 from b2bapi.db import db
 from b2bapi.db.models.filters import (
-    Filter, ProductFilter as PFilter, FilterSet as FSet)
+    Filter, ProductFilter as PFilter, FilterSet)
 from ._route import route, hal, json_abort
 
 def _create_filter_sets(tenant_id):
@@ -30,7 +30,7 @@ def _create_filter_sets(tenant_id):
 @route('/filter-sets', expects_tenant=True)
 def get_filter_sets(tenant):
     tenant_id = tenant.tenant_id
-    fsets = FSet.query.filter_by(tenant_id=tenant_id).all()
+    fsets = FilterSet.query.filter_by(tenant_id=tenant_id).all()
     if not fsets:
         fsets = _create_filter_sets(tenant.tenant_id)
 
@@ -72,7 +72,7 @@ def get_filter_set(filter_set_id):
        expects_tenant=True)
 def post_filter(filter_set_id, data, tenant):
     try:
-        fs = FSet.query.filter_by(
+        fs = FilterSet.query.filter_by(
             filter_set_id=filter_set_id,
             tenant_id=tenant.tenant_id).one()
     except:
