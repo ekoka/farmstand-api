@@ -11,10 +11,28 @@ from b2bapi.db.models.filters import (
     Filter, ProductFilter as PFilter, FilterSet as FSet)
 from ._route import route, hal, json_abort
 
+def _create_filter_sets(tenant_id):
+    categories = FilterSet(tenant_id=tenant_id)
+    categories.data = {
+        'label': {'en': 'Categories', 'fr': 'Catégories'},
+        'multichoice': True,
+    }
+    brands = FilterSet(tenant_id=tenant_id)
+    brands.data = {
+        'label': {'en': 'Brands', 'fr': 'Marques'},
+        'multichoice': False,
+    }
+    db.session.add(categories)
+    db.session.add(brands)
+    db.session.flush()
+    return [categories, brands]
+
 @route('/filter-sets', expects_tenant=True)
 def get_filter_sets(tenant):
     tenant_id = tenant.tenant_id
     fsets = FSet.query.filter_by(tenant_id=tenant_id).all()
+    if not fsets:
+        fsets = _create_filter_sets(tenant.tenant_id)
 
     rv = hal() 
     rv._l('self', url_for('api.get_filter_sets'))
