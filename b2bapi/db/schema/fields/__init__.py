@@ -1,0 +1,15 @@
+from .available import schema as available
+from .categories import schema as categories
+from .description import schema as description
+from .dimensions import schema as dimensions
+from .display import schema as display
+from .featured import schema as featured
+from .ingredients import schema as ingredients
+from .maker import schema as maker
+from .name import schema as name
+from .new import schema as new
+from .note import schema as note
+from .refno import schema as refno
+from .title import schema as title
+from .weight import schema as weight
+from .number import schema as number

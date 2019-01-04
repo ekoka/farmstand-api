@@ -12,14 +12,10 @@ from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 #from b2bapi.utils.hal import Resource as Hal
 from .validation.accounts import new_account
-from ._route import route, hal
+from ._route import route, hal, json_abort
 
 from b2bapi.utils.gauth import GAuth
    
-def logger(*a, **kw):
-    return app.config['LOGGER'].info(*a, **kw)
-
-
 def generate_key(length=24):
     return secrets.token_urlsafe(length)
 
@@ -147,7 +143,7 @@ def get_access_key(params):
                 }],
                 'self': {
                     'href': url_for('api.get_access_key'),
-                    'simpleb2b:account-create': url_for('api.post_account'),
+                    #'simpleb2b:account-create': url_for('api.post_account'),
                 },
                    
             },
@@ -225,10 +221,11 @@ def _verify_auth_token(data):
         json_abort(401, {'error':'Missing authentication token'})
 
     if not data.get('provider'):
-        abort(401, 'Missing authentication provider')
+        json_abort(401, {'error': 'Missing authentication provider'})
 
     if data['provider'].lower()=='google':
         return ggauth.verify_token(data['token'])
+
     elif data['provider'].lower()=='simpleb2b':
         #token_expr = {"tokens": [{"type": "activation_token", 
         #                        "status": "active"}]}
@@ -353,10 +350,15 @@ def _get_account_resource(account, partial=False):
     rv._k('first_name', account.first_name)
     rv._k('last_name', account.last_name)
 
-    if account.tenant:
-        rv._l('simpleb2b:tenant', url_for(
-            'api.get_tenant', tname=account.tenant.name))
-        rv._embed('tenant', _get_tenant_resource(account.tenant, partial=True))
+    #if account.tenant:
+    #    rv._l('simpleb2b:tenant', url_for(
+    #        'api.get_tenant', tname=account.tenant.name))
+    #    rv._embed('tenant', _get_tenant_resource(account.tenant, partial=True))
+    tenants = [_get_tenant_resource(tenant.tenant, partial=True) 
+               for tenant in account.tenants]
+    rv._k('roles', {t.tenant.name:t.role for t in account.tenants})
+    rv._embed('tenants', [_get_tenant_resource(tenant.tenant, partial=True)
+                          for tenant in account.tenants])
 
     if partial:
         rv._k('primary_email', account.email)

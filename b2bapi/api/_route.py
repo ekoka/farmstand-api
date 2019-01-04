@@ -201,43 +201,6 @@ def http_access_key_authentication():
         g.current_account = access_key.account
         return True
 
-#def proxy_authentication():
-#    access_token_realms = [f'{proxy_auth_ns}-access-token', 
-#                         f'{proxy_auth_ns}', 
-#                         f'{proxy_auth_ns}accesstoken']
-#    try:
-#        realm, credentials = request.headers.split(' ')
-#        if realm not in access_token_realms:
-#            headers = {}
-#        else:
-#            headers = {'Authorization': f'access_token {credentials}'}
-#    except (KeyError, AttributeError):
-#        headers = {}
-#
-#    params = {}
-#    for rlm in access_token_realms:
-#        access_token = request.args.get(rlm)
-#        if access_token:
-#            params = {'access_token': access_token}
-#            break
-#
-#    resp = requests.get(
-#        proxy_auth_url + '/api/v1/c/simpleb2b/profile', headers=headers, 
-#        params=params)
-#    if resp.status_code==200:
-#        data = resp.json()
-#        email_signin_expr = {
-#            'signins': [
-#                {"type": "password", "email": data['email']}
-#            ]
-#        }
-#        try:
-#            user = U.query.filter(
-#                U.meta.comparator.contains(email_signin_expr)).one()
-#            return True
-#        except:
-#            pass
-
 def get_access_token():
     access_token_schemes = ['access-token', 'accesstoken', 'access_token']
     try:
@@ -391,12 +354,13 @@ def route(
     authorize=None, expects_lang=False, expects_account=False,
     expects_role=False, expects_tenant=False, expects_auth=False,
     passthrough=None, cacheable=False, if_match=False, if_none_match=False,
-    endpoint=None):
+    endpoint=None, **kw):
     """ function to map  route to function """
 
     if methods is None: methods = ['GET',]
 
-    def wrapper(fnc):
+    def wrapper(view_func):
+        fnc = view_func
         _endpoint = endpoint or fnc.__name__
         _url_pattern = url_pattern
         _tenanted = tenanted
@@ -491,7 +455,9 @@ def route(
             methods.append('OPTIONS')
 
         bp.add_url_rule(_url_pattern, endpoint=_endpoint, view_func=fnc,
-                               methods=_methods)
-        return fnc
+                               methods=_methods, **kw)
+
+        # make sure the view_func is still usable out of the request context
+        return view_func
 
     return wrapper

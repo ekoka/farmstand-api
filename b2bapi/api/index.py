@@ -16,6 +16,7 @@ def get_index():
 @route('/root', tenanted=False)
 def get_root():
     rv = hal()._l('self', url_for('api.get_root'))
+    rv._l('simpleb2b:access_key', url_for('api.get_access_key'))
     rv._l('simpleb2b:signins', url_for('api.post_signin'))
     rv._l('simpleb2b:accounts', url_for('api.post_account'))
     #rv._l('simpleb2b:account', '/api/v1/accounts/{account_id}', templated=True)

@@ -1,5 +1,6 @@
 import uuid
 import simplejson as json
+import copy
 
 from flask import redirect, g, current_app as app, abort, url_for
 from sqlalchemy.orm import exc as orm_exc
@@ -7,87 +8,224 @@ from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
 
 from b2bapi.db import db
-from b2bapi.db.models.products import Product, ProductSchema as PSchema
-from b2bapi.db.models.filters import Filter
+from b2bapi.db.models.products import Product
+from b2bapi.db.models.meta import ProductType, Field
 from b2bapi.utils.uuid import clean_uuid
+from b2bapi.db.schema import generic as product_schema
 from ._route import route, json_abort, hal
 
 from .validation.products import (add_product, edit_product)
-from .filters import _get_filter_resource
 
-
-# ------------------------ Products ------------------------ # 
-
-@route('/products', methods=['GET'], expects_params=True, expects_tenant=True,
-       authenticate=True)
-def get_products(params, tenant):
-    tenant_id = tenant.tenant_id
+@route('/products', methods=['GET'], expects_params=True, expects_lang=True)
+def get_products(params, lang):
+    max_id = None
+    min_id = None
+    tenant_id = g.tenant['tenant_id']
     q = Product.query.filter_by(tenant_id=tenant_id)
-    #if params.get('filters'): 
-    #    filters = json.loads(params['filters'])
-    #    q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
+    if params.get('filters'): 
+        filters = json.loads(params['filters'])
+        q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
+    #_p_order = lambda p: p.data['fields_order'][0]
     products = q.all()
-    product_url = url_for('api.get_product', product_id='{product_id}')
-    rv = hal()
-    rv._l('self', url_for('api.get_products',**params))
-    rv._l('simpleb2b:product', product_url, unquote=True, templated=True)
+    rv = {
+        'self': url_for('api.get_products',**params),
+        'products': [_product_summary(p, lang) for p in products],
+    }
+    return rv, 200, []
 
-    rv._embed('products', [_get_product_resource(p, partial=True)
-                           for p in products])
+def _product_summary(p, lang):
+    return {
+        'self': url_for('api.get_product_summary', product_id=p.product_id),
+        'product_id': p.product_id.hex,
+        #'caption': _caption(p.data, lang),
+        'captionable_fields': _caption_fields(p.data['fields'], lang),
+        'url': url_for('api.get_product', product_id=p.product_id),
+    } 
+
+def _caption_fields(fields, lang):
+    rv = []
+    for f in fields:
+        if f.get('field_type')=='SHORT_TEXT' and f.get('value', {}).get(lang):
+            rv.append({'value': f['value'][lang], 'captionable': f.get('captionable')})
+    return rv
+
+def _caption(data, lang):
+    ''' caption is made of either:
+        1- all the fields that have the `captionable` flag
+        2- the field with hte `caption` name
+        3- the first SHORT_TEXT field
+    '''
+    rv = ''
+    try:
+        captionable = []
+        named_caption = None
+        short_text_caption = None
+        for f in data['fields']:
+            # only SHORT_TEXT can be part of caption
+            if f['field_type']!='SHORT_TEXT':
+                continue
+            if not short_text_caption:
+                short_text_caption = f['value'][lang]
+            if not named_caption and f.get('name')=='caption':
+                named_caption = f['value'][lang]
+            if f.get('captionable') and f['value'][lang]:
+                captionable.append(f['value'][lang])
+        # TODO: put the separator in a config
+        caption = '-'.join(captionable) or named_caption or short_text_caption
+        return caption or ''
+    except:
+        return ''
+
+
+
+
+# TODO: temporarily hardwired 
+#@route('/product-templates/<product_type_id>', methods=['GET'])
+#def get_product_template(product_type_id):
+#    tenant_id = g.tenant['tenant_id']
+#    product_type = ProductType.query.filter_by(
+#        product_type_id=product_type_id, tenant_id=tenant_id).one()
+#    product = {
+#        'product_id': uuid.uuid4().hex,
+#    }
+#    # if ProductType object has schema load it
+#    if product_type.schema:
+#        # we get all fields for this product type
+#        product_fields = product_type.schema.get('fields', [])
+#        # load all field schemas
+#        field_metas = load_field_metas([f['name'] for f in product_fields])
+#        # init product fields with info found in field schema
+#        product['fields'] = [field_metas[pf['name']].init_schema(pf) 
+#                             for pf in product_fields]
+#    rv = {
+#        'self': url_for(
+#            'api.get_product_template', product_type_id=product_type_id),
+#        'template': product,
+#    }
+#    return rv, 200, []
+
+
+def _localized_field_schema(field, lang):
+    rv = {}
+    rv['label'] = field['schema']['label'][lang]
+    
+    if field['field_type']=='BOOL':
+        for v in ('true', 'false'):
+            rv.setdefault('options',{})[v] = field['schema']['options'][v][lang]
+        return rv
+
+    if field['field_type'] in ('MULTI_CHOICE', 'SINGLE_CHOICE',):
+        for o in field['schema']['options']:
+            rv.setdefault('options',[]).append(
+                {'value': o['value'], 'label': o['label'][lang]})
+    return rv
+
+def _field_schema(f, lang):
+    field = copy.deepcopy(f['field'])
+    field['display'] = f.get('display', False)
+    field['searchable'] = f.get('searchable', False)
+    field['schema'] = _localized_field_schema(field, lang)
+    return field
+
+# NOTE: just an alias route
+@route('/product-template', endpoint='get_product_template', expects_lang=True)
+@route('/product-schema', expects_lang=True) 
+def get_product_schema(lang):
+    rv = hal()
+    rv._l('self', url_for('api.get_product_schema'))
+    rv._k('name', product_schema['name'])
+    rv._k('fields', [_field_schema(f, lang) 
+                     for f in product_schema['schema']['fields']])
     return rv.document, 200, []
 
-def _get_product_resource(p, partial=True):
-    rv = hal()
-    rv._l('self', url_for('api.get_product', product_id=p.product_id,
-                          partial=partial))
-    rv._k('product_id', p.product_id.hex)
-    if partial:
-        rv._k('partial', partial)
-        rv._k('fields', [f.get('en') 
-                         for f in p.data.setdefault('fields', [])[:3]])
-    else:
-        rv._k('available', p.available)
-        rv._k('visible', p.visible)
-        rv._k('fields', [f.get('en') for f in p.data.setdefault('fields', [])])
-        rv._k('unit_price', p.data.get('unit_price'))
-        rv._k('quantity_unit', p.data.get('quantity_unit'))
-        rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
-    return rv.document
-
-def _get_product(product_id, tenant_id):
+def _get_product(product_id):
     product_id = clean_uuid(product_id)
     try:
         if product_id is None:
             raise orm_exc.NoResultFound()
         return Product.query.filter_by(product_id=product_id, 
-                                       tenant_id=tenant_id).one()
+                                       tenant_id=g.tenant['tenant_id']).one()
     except orm_exc.NoResultFound as e:
-        json_abort(404, {'error': 'Product Not Found'})
+        abort(404)
 
-@route('/products/<product_id>', authenticate=True, expects_tenant=True,
-       expects_params=True)
-def get_product(product_id, tenant, params):
-    # in the meantime, while waiting for validation
-    partial = int(params.get('partial', False))
-    app.logger.info(partial)
-    product = _get_product(product_id, tenant.tenant_id)
-    document = _get_product_resource(product, partial=partial)
-    return document, 200, []
+@route('/product-summary/<product_id>', expects_lang=True)
+def get_product_summary(product_id, lang):
+    record = _get_product(product_id)
+    rv  = _product_summary(record, lang)
+    return rv, 200, []
+
+@route('/products/<product_id>', expects_lang=True)
+def get_product(product_id, lang):
+    product = _get_product(product_id)
+    rv = {
+        'self': url_for('api.get_product', product_id=product_id),
+        'summary_url': url_for('api.get_product_summary', product_id=product_id),
+        #'caption': _caption(product, lang),
+        'product_id': product_id,
+        'fields': _fields(product.data.get('fields', []), lang),
+    }
+    return rv, 200, []
+
+def _fields(fields, lang):
+    if not fields:
+        return []
+    names = [f['name'] for f in fields if f.get('name')]
+    field_metas = load_field_metas(names, g.tenant['tenant_id'])
+    return [_field(f, field_metas.get(f.get('name')), lang) for f in fields]
+
+def _field(f, meta, lang):
+    rv = dict(
+        name = f.get('name'),
+        #field_type = meta.field_type,
+        #label = meta.schema.get('label', {}).get(lang, None)
+        publish = f.get('publish'),
+        captionable = f.get('captionable'),
+        searchable = f.get('searchable'),
+        meta = {
+            'url': url_for('api.get_field', field_id=clean_uuid(meta.field_id)),
+            'name': f['name'],
+            'field_id': clean_uuid(meta.field_id),
+            'rel': 'FieldMeta',} if meta else None,
+    )
+    if meta and (meta.field_type in Field.text_types):
+        rv['value'] = f.get('value', {}).get(lang)
+    else:
+        rv['value'] = f.get('value', None)
+    return rv
 
 
-def populate_product(product, data):
+def load_field_metas(schema_names, tenant_id):
+    # query the db for fields with those names and produce
+    # a dict indexed by those names
+    fields = Field.query.filter(Field.tenant_id==tenant_id, 
+                                Field.name.in_(schema_names)).all()
+    return {f.name:f for f in fields}
+
+
+def hydrate_field(product_field, field):
+    pf = product_field
+    return {
+        'name': pf['name'],
+        'searchable':  pf.get('searchable', False),
+        'publish':  pf.get('publish', False),
+        'value': pf.get('value', None),
+        #'properties': field.schema if field else None,
+    }
+
+
+def populate_product(product, data, lang):
     for k,v in data.items():
         if k=='data':
             for kk, vv in v.items():
                 if kk=='fields':
-                    _merge_fields(product.data, vv)
+                    _merge_fields(product.data, vv, lang)
                 else:
                     product.data[kk] = vv
             #product.data = {k: v}
         else:
             setattr(product,k,v)
 
-def _merge_fields(productdata, datafields):
+def _merge_fields(productdata, datafields, lang):
     field_types = {f.name: f.field_type for f in Field.query.all()}
     for df in datafields:
         field_type = field_types.get(df.get('name'))
@@ -97,7 +235,7 @@ def _merge_fields(productdata, datafields):
             for pf in productdata['fields']:
                 if pf.get('name')==df['name']:
                     df['value'] = pf.get('value', {}) # localized values
-            df['value']= value # merge localized and uploaded value 
+            df['value'][lang] = value # merge localized and uploaded value 
     productdata['fields'] = datafields
 
 
@@ -105,74 +243,40 @@ def db_flush():
     try:
         db.session.flush()
     except sql_exc.IntegrityError as e:
-        raise
         db.session.rollback()
-        json_abort(400, {'error': 'Could not save record. Verify format.'})
+        abort(400, 'Problem with the saving of data')
 
-@route('/products', methods=['POST'], expects_data=True, authenticate=True,
-       expects_tenant=True)
-def post_product(data, tenant):
-    # TODO validation
-    #try:
-    #    data = add_product.validate(data)
-    #except vno_err.ValidationErrorStack as e:
-    #    abort(400, 'Invalid data ' + str(e))
-
-    # while we're waiting for proper validation
-    filters = data.pop('filters', [])
-
-    data['data'] = {
-        'quantity_unit' : data.pop('quantity_unit', None),
-        'unit_price' : data.pop('unit_price', None),
-        'fields' : [{'en': f} for f in data.pop('fields', [])],
-    }
-    data['tenant_id'] = tenant.tenant_id
-
-    p = Product(**data)
-
-    for f in filters:
-        p.product_filters.append(ProductFilter(filter_id=f.filter_id))
+@route('/products', methods=['POST'], expects_data=True, expects_lang=True)
+def post_product(data, lang):
+    app.logger.info(data)
+    try:
+        data = add_product.validate(data)
+    except vno_err.ValidationErrorStack as e:
+        raise
+        abort(400, 'Invalid data ' + str(e))
+    app.logger.info(data)
+    p = Product(data={'fields': []})
+    #record(**data)
+    populate_product(p, data, lang)
     db.session.add(p)
     db_flush()
-    location = url_for('api.get_product', product_id=p.product_id, partial=False)
-    rv = hal()
-    rv._l('location', location)
-    rv._k('product_id', p.product_id)
-    return rv.document, 201, [('Location', location)]
+    redirect_url = url_for('api.get_product', product_id=p.product_id)
+    return {'product_id': p.product_id, 
+            'location': redirect_url}, 201, [('Location', redirect_url)]
 
 @route('/products/<product_id>', methods=['PUT'], expects_data=True,
-       authenticate=True, expects_tenant=True)
-def put_product(product_id, data, tenant):
-    # TODO: validation
-    # data = edit_product.validate(data)
-    p = _get_product(product_id, tenant.tenant_id)
-
-    filters = data.pop('filters', [])
-    fields = data.pop('fields', [])
-    data.pop('data', None)
-    p.populate(**data)
-
-    try:
-        for i,f in enumerate(fields):
-            try:
-                val = p.data.setdefault('fields', [])[i]
-                val['en'] = f
-            except IndexError:
-                val = {'en': f}
-                p.data.setdefault('fields', []).append(val)
-    except:
-        json_abort(400, {'error':'Bad Format'})
-
-    p.filters = Filter.query.filter(Filter.filter_id.in_(filters)).all()
-
+       expects_lang=True)
+def put_product(product_id, data, lang):
+    data = edit_product.validate(data)
+    p = _get_product(product_id)
+    populate_product(p, data, lang)
     db_flush()
-    return {}, 200, []
+    return None, 204, []
 
-@route('/products/<product_id>', methods=['DELETE'], authenticate=True,
-       expects_tenant=True)
-def delete_product(product_id, tenant):
+@route('/products/<product_id>', methods=['DELETE'])
+def delete_product(product_id):
     try:
-        p = _get_product(product_id, tenant.tenant_id)
+        p = _get_product(product_id)
         db.session.delete(p)
         db.session.flush()
         #.products.delete().where(
@@ -180,7 +284,7 @@ def delete_product(product_id, tenant):
         #    (products.c.product_id==product_id)))
     except:
         pass
-    return {}, 200, []
+    return ({}, 200, [])
 
 
 def filtered_query(q, filters):
@@ -196,52 +300,4 @@ def filtered_query(q, filters):
             q = q.filter(db.text(text_filter.format(name=n, value=v)))
     return q
 
-# ---------------------------------------------------------------- # 
-# ---------------------------------------------------------------- # 
-
-# ------------------------ Product Schema ------------------------ # 
-
-def _set_default_product_schema(tenant_id):
-    ps = PSchema.query.get(tenant_id)
-    if ps:
-        return ps
-    try:
-        ps = PSchema(product_schema_id=tenant_id)
-
-        ps.data['fields'] =  [None for i in range(5)]
-        db.session.add(ps)
-        db.session.flush()
-        return ps
-    except Exception as e:
-        db.session.rollback()
-        json_abort(401, {})
-
-@route('/product-schema', authenticate=True, expects_tenant=True)
-def get_product_schema(tenant):
-    ps = _set_default_product_schema(tenant.tenant_id)
-    rv = hal()
-    rv._l('self', url_for('api.get_product_schema'))
-
-    #for k,v in ps.data.items():
-
-    def getitem(l, i, default=None):
-        try:
-            return l[i]
-        except:
-            l.append(default)
-            return default
-
-    rv._k('fields', ps.data['fields'])
-    return rv.document, 200, []
-   
-@route('/product-schema', methods=['PUT'], authenticate=True, 
-       expects_tenant=True, expects_data=True)
-def put_product_schema(data, tenant):
-    ps = _set_default_product_schema(tenant.tenant_id)
-    for k,v in data.items():
-        ps.data[k] = v
-    db.session.flush()
-    rv = hal()
-    rv._l('product_schema', url_for('api.get_product_schema'))
-    return rv.document, 200, []
 

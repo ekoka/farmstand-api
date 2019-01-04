@@ -21,7 +21,15 @@ class Tenant(db.Model):
         "email"
     }
     """
-    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
 
-    account = db.relationship(
-        'Account', backref=db.backref('tenant', uselist=False))
+class TenantAccount(db.Model):
+    __tablename__ = 'tenant_accounts'
+
+    tenant_id = db.Column(None, db.ForeignKey(
+        'tenants.tenant_id', ondelete='cascade'), primary_key=True)
+    account_id = db.Column(None, db.ForeignKey(
+        'accounts.account_id', ondelete='cascade'), primary_key=True)
+    role = db.Column(db.Unicode, nullable=False, default='buyer')
+
+    tenant = db.relationship(Tenant, backref='accounts')
+    account = db.relationship('Account', backref='tenants')

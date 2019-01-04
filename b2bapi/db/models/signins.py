@@ -11,7 +11,7 @@ class Signin(db.Model):
     __tablename__='signins'
     signin_id = db.Column(db.UUID, primary_key=True, default=uuid.uuid4)
     email = db.Column(db.Unicode, unique=True)
-    _password = db.Column('password', db.Unicode)
+    passcode = db.Column('passcode', db.Unicode, nullable=True)
     confirmed = db.Column(db.Boolean, default=False)
     failure = db.Column(db.Integer)
     last_successful = db.Column(db.DateTime)
@@ -29,32 +29,17 @@ class Signin(db.Model):
         }
     """
 
-    @hybrid_property
-    def password(self):
-        return self._password
-
-    @password.setter
-    def password(self, password):
-        self._password = encrypt_password(password)
-
-
-    @classmethod
-    def login(cls, password):
-        s = cls.query.filter(cls.email==email).one()
-        if s.authenticate(password):
-            # create an access token for user_id
-            jwt = create_jwt_token(u)
-            # TODO: register token in redis
-            return jwt
-
-    def authenticate(self, password):
-        # password must be an unicode object
-        try:
-            password = password.encode('utf-8')
-            return self.password==bcrypt.hashpw(
-                password, self.password.encode('utf-8')).decode('utf-8')
-        except AttributeError:
+    def authenticate(self, passcode):
+        if not self.passcode==passcode:
+            self.failure += 1
             return False
+        self.failure = 0
+        return True
+        # TODO:  update `last_successful` to datetime.now()
+            
+
+    def clear_passcode(self):
+        self.passcode = None
 
     def get_token(self, token_type='access_token', status='active'):
         for i,t in enumerate(self.meta.get('tokens', [])):
@@ -91,13 +76,6 @@ class Signin(db.Model):
         except (KeyError, IndexError) as e:
             pass
 
-
-def encrypt_password(password):
-    password = password.encode('utf-8')
-    salt = bcrypt.gensalt()
-    pwhash = bcrypt.hashpw(password, salt)
-    # return in unicode
-    return pwhash.decode('utf-8')
 
 
 # TODO: ENABLE class UserView(db.Model): __abstract__=True

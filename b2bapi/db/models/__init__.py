@@ -49,5 +49,7 @@ from . import (
     filters,
     images,
     accounts,
-    inquiries,
+    #inquiries,
+    quotations,
+    meta,
 )

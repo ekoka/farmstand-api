@@ -34,17 +34,11 @@ def with_clause(element, compiler, **kw):
         aliases=aliases,
         query=compiler.process(element.query))
 
-class ProductSchema(db.Model):
+class ProductSchema(db.Model, db.TenantMixin):
     __tablename__ = 'product_schema'
 
-    product_schema_id = db.Column(
-        None, db.ForeignKey('tenants.tenant_id'), primary_key=True)
+    product_schema_id = db.Column(db.UUID, primary_key=True)
     data = db.Column(db.JSONB, default=dict)
-
-    tenant = db.relationship('Tenant', backref="product_schema")
-    #tenant = db.relationship(
-    #    'Tenant', backref="product_schema", 
-    #    foreign_keys='[ProductSchema.product_schema_id]')
 
 class Product(db.Model, db.TenantMixin):
     __tablename__ = 'products'
@@ -52,9 +46,49 @@ class Product(db.Model, db.TenantMixin):
     product_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     available = db.Column(db.Boolean, default=False)
     visible = db.Column(db.Boolean, default=False)
-    data = db.Column(db.JSONB, default=lambda: {})
+    data = db.Column(db.JSONB, default=dict)
+    """
+    {
+        "fields": [
+            {"field": <field>, "visible": <bool>, "searchable": <bool>}, 
+            ... 
+        ]
+    }
+    """
+    product_family_id = db.Column(None, nullable=True)
+
+    __table_args__ = (
+        db.ForeignKeyConstraint([product_family_id, 'tenant_id'], 
+                                ['product_families.product_family_id', 
+                                 'product_families.tenant_id'],
+                               'products_product_family_id_fkey'),
+    )
+
+class ProductFamily(db.Model, db.TenantMixin):
+    """
+    The idea behind product families is that some products might just be
+    different versions of one another. The differing features being such
+    attributes as size, color, etc. 
+    Product families enable to associate them in a grouping.
+    """
+    __tablename__ = 'product_families'
+
+    product_family_id = db.Column(db.UUID, primary_key=True)
+    main_product_id = db.Column(None)
+
+    __table_args__ = (
+        db.ForeignKeyConstraint([main_product_id, 'tenant_id'],
+                                ['products.product_id', 'products.tenant_id'],
+                               'product_families_main_product_id_fkey'),
+    )
 
 class RelatedProduct(db.Model, db.TenantMixin):
+    """
+    Related products are products that have some common traits, even if not
+    from the same family. e.g. Gummy bear and gummy worms aren't the same
+    products, but someone interested in one is likely to also be interested
+    by the other.
+    """
     __tablename__ = 'related_products'
     
     left_id = db.Column(None)
@@ -68,7 +102,7 @@ class RelatedProduct(db.Model, db.TenantMixin):
         db.CheckConstraint(left_id<right_id),
     )
 
-class ProductSearch(db.TenantMixin, db.Model):
+class ProductSearch(db.Model, db.TenantMixin):
     __tablename__ = 'product_search'
 
     product_id = db.Column(None, primary_key=True)
@@ -79,4 +113,3 @@ class ProductSearch(db.TenantMixin, db.Model):
         db.ForeignKeyConstraint([product_id, 'tenant_id'], 
                                 ['products.product_id', 'products.tenant_id']),
     )
-

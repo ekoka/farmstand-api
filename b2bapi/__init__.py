@@ -44,12 +44,11 @@ def make_app(config_obj=None):
     # DATABASE
     db.init_app(app)
     db.app = app
-    if app.config.get('FORCE_CREATE_DB_SCHEMA'):
-        with app.app_context():
-            #db.drop_all()
-            db.create_all()
+    if app.config.get('FORCE_DROP_DB_SCHEMA'):
+        db.drop_all()
+    with app.app_context():
+        db.create_all()
 
-    # MENU
     #app.mailer = Gmail(app.config['GMAIL_LOGIN'], app.config['GMAIL_PASSWORD'])
 
     #@app.before_request
@@ -101,7 +100,6 @@ def enable_file_logging(app):
     app.logger.addHandler(DebugFileHandler(path))
 
 def get_tenant(request):
-    import logging
     domain = current_app.config['SERVER_DOMAIN']
     try:
         subdomain = request.host.rpartition(domain)[0].strip('.') or 'www'

@@ -55,20 +55,20 @@ def post_tenant(data, account):
 
 def _get_tenant_resource(tenant, partial=False):
     tenant_url = url_for('api.get_tenant', tname=tenant.name)
-    account_url = url_for('api.get_account', account_id=tenant.account_id)
+    #account_url = url_for('api.get_account', account_id=tenant.account_id)
     product_schema_url = url_for('api.get_product_schema', tenant=tenant.name)
     filter_set_url = url_for('api.get_filter_sets', tenant=tenant.name)
     products_url = url_for('api.get_products', tenant=tenant.name)
     product_url = url_for('api.get_product', tenant=tenant.name, 
                           product_id='{product_id}')
-    inquiries_url = url_for('api.get_inquiries', tenant=tenant.name)
+    #inquiries_url = url_for('api.get_inquiries', tenant=tenant.name)
     rv = hal()._l('self', tenant_url)
     rv._k('name', tenant.name)
-    rv._l('simpleb2b:account', account_url)
+    #rv._l('simpleb2b:account', account_url)
     rv._l('simpleb2b:product_schema', product_schema_url)
     rv._l('simpleb2b:filter_sets', filter_set_url)
     rv._l('simpleb2b:products', products_url)
-    rv._l('simpleb2b:inquiries', inquiries_url)
+    #rv._l('simpleb2b:inquiries', inquiries_url)
     rv._l('simpleb2b:product', product_url, unquote=True, templated=True )
     if partial:
         return rv._k('_partial', True).document
@@ -93,5 +93,6 @@ def get_tenant(tname):
     try:
         tenant = Tenant.query.filter(Tenant.name==tname).one()
     except:
+        raise
         json_abort(404, {'error_code': 404, 'error': 'Tenant not found'})
     return _get_tenant_resource(tenant), 200, []

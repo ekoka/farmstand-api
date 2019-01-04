@@ -32,16 +32,14 @@ def post_signin(data):
                           else False)
         if account_exists:
             raise sql_exc.IntegrityError
-        password = data.pop('password') 
-        signin = Signin(email=email, password=password, data=data, meta={})
-        #signin.password = password
-        signin.set_token(
-            token_type='activation_token', status='new', lang='en')
+        signin = Signin(email=email, data=data, meta={})
+        # NOTE: possibly not needed anymore, now that we're going passwordless
+        #signin.set_token(
+        #    token_type='activation_token', status='new', lang='en')
         db.session.add(signin)
         db.session.flush()
     except sql_exc.IntegrityError as e:
         db.session.rollback()
-        raise
         json_abort(409, {'error': 'Problem creating Signin. E-mail address may '
                          'already exist.'})
     except:
