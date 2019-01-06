@@ -1,11 +1,12 @@
 schema = {
     "name": "new",
     "field_type": "BOOL",
+    "control": "checkbox",
     "schema": {
         "label": {"en": "New", "fr": "Nouveauté"},
         "options": {
-            "true": {"en": "New", "fr": "Nouveauté"},
-            "false": {"en": "", "fr": ""}
+            True: {"en": "New", "fr": "Nouveauté"},
+            False: {"en": "", "fr": ""}
         }
     }
 }

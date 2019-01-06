@@ -4,8 +4,8 @@ schema = {
     "schema": {
         "label": {"en": "Display", "fr": "Afficher"},
         "options": {
-            "true": {"en": "Display", "fr": "Afficher"},
-            "false": {"en": "", "fr": ""}
+            True: {"en": "Display", "fr": "Afficher"},
+            False: {"en": "", "fr": ""}
         }
     }
 }

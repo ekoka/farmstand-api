@@ -1,13 +1,14 @@
 schema = {
     "name": "available",
     "field_type": "BOOL",
+    "control": "radio",
     "schema": {
-        "label": {"en": "Available", "fr": "Disponible"},
+        "label": {"en": "Product currently available", "fr": "Produit actuellement disponible"},
         "options": {
-            "true": {"en": "Available", "fr": "Disponible"},
-            "false": {
-                "en": "Currently not available",
-                "fr": "Actuellement non disponible"}
+            True: {"en": "Yes", "fr": "Oui"},
+            False: {
+                "en": "No",
+                "fr": "Non"}
         }
     }
 }

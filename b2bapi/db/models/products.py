@@ -44,7 +44,6 @@ class Product(db.Model, db.TenantMixin):
     __tablename__ = 'products'
 
     product_id = db.Column(db.UUID, primary_key=True, default=uuid4)
-    available = db.Column(db.Boolean, default=False)
     visible = db.Column(db.Boolean, default=False)
     data = db.Column(db.JSONB, default=dict)
     """

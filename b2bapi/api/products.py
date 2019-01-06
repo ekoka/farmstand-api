@@ -110,7 +110,7 @@ def _localized_field_schema(field, lang):
     rv['label'] = field['schema']['label'][lang]
     
     if field['field_type']=='BOOL':
-        for v in ('true', 'false'):
+        for v in (True, False):
             rv.setdefault('options',{})[v] = field['schema']['options'][v][lang]
         return rv
 
@@ -138,15 +138,15 @@ def get_product_schema(lang):
                      for f in product_schema['schema']['fields']])
     return rv.document, 200, []
 
-def _get_product(product_id):
+def _get_product(product_id, tenant_id):
     product_id = clean_uuid(product_id)
     try:
         if product_id is None:
             raise orm_exc.NoResultFound()
         return Product.query.filter_by(product_id=product_id, 
-                                       tenant_id=g.tenant['tenant_id']).one()
+                                       tenant_id=tenant_id).one()
     except orm_exc.NoResultFound as e:
-        abort(404)
+        json_abort(404, {'error': 'Product Not Found'})
 
 @route('/product-summary/<product_id>', expects_lang=True)
 def get_product_summary(product_id, lang):
@@ -154,17 +154,61 @@ def get_product_summary(product_id, lang):
     rv  = _product_summary(record, lang)
     return rv, 200, []
 
-@route('/products/<product_id>', expects_lang=True)
-def get_product(product_id, lang):
-    product = _get_product(product_id)
-    rv = {
-        'self': url_for('api.get_product', product_id=product_id),
-        'summary_url': url_for('api.get_product_summary', product_id=product_id),
-        #'caption': _caption(product, lang),
-        'product_id': product_id,
-        'fields': _fields(product.data.get('fields', []), lang),
-    }
-    return rv, 200, []
+#@route('/products/<product_id>', expects_lang=True)
+#def get_product(product_id, lang):
+#    product = _get_product(product_id)
+#    rv = {
+#        'self': url_for('api.get_product', product_id=product_id),
+#        'summary_url': url_for('api.get_product_summary', product_id=product_id),
+#        #'caption': _caption(product, lang),
+#        'product_id': product_id,
+#        'fields': _fields(product.data.get('fields', []), lang),
+#    }
+#    return rv, 200, []
+
+@route('/products/<product_id>', authenticate=True, expects_tenant=True,
+       expects_params=True, expects_lang=True)
+def get_product(product_id, tenant, params, lang):
+    # in the meantime, while waiting for validation
+    partial = int(params.get('partial', False))
+    product = _get_product(product_id, tenant.tenant_id)
+    document = _get_product_resource(product, lang, partial=partial)
+    return document, 200, []
+
+def _localized_product_field(f, lang):
+    rv = dict(**f)
+    app.logger.info(rv)
+    if f.get('field_type') in Field.text_types:
+        rv['value'] = rv.setdefault('value', {}).get(lang)
+    return rv
+
+def _get_product_resource(p, lang, partial=True):
+    rv = hal()
+    rv._l('self', url_for('api.get_product', product_id=p.product_id,
+                          partial=partial))
+    rv._k('product_id', p.product_id.hex)
+    rv._k('visible', p.visible)
+    if partial:
+        # we set the `partial` flag on partial representations. HAL allows
+        # for some inconsistencies between representations of the same 
+        # resource. 
+        rv._k('partial', partial)
+
+        # we only get the first 3 fields if it's a partial product resource
+        # we're fetching
+        fields = [_localized_product_field(f, lang)
+                        for f in p.data.setdefault('fields', [])[:3]]
+    else:
+        # we get all fields for a non-partial representation
+        fields = [_localized_product_field(f, lang) 
+                         for f in p.data.setdefault('fields', [])]
+        # NOTE: maybe we'll add this at some point
+        #rv._k('unit_price', p.data.get('unit_price'))
+        #rv._k('quantity_unit', p.data.get('quantity_unit'))
+        # TODO:
+        #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
+        rv._k('data', {'fields': fields})
+    return rv.document
 
 def _fields(fields, lang):
     if not fields:
@@ -216,26 +260,51 @@ def hydrate_field(product_field, field):
 def populate_product(product, data, lang):
     for k,v in data.items():
         if k=='data':
-            for kk, vv in v.items():
-                if kk=='fields':
-                    _merge_fields(product.data, vv, lang)
+            for data_key, data_value in v.items():
+                if data_key=='fields':
+                    # we merge fields data
+                    _merge_fields(product.data, data_value, lang)
                 else:
-                    product.data[kk] = vv
-            #product.data = {k: v}
+                    # we simply overwrite other data
+                    product.data[data_key] = data_value
         else:
             setattr(product,k,v)
 
+# TODO: we'll eventually have to revert to this version or something close,
+# that is aware of Field schema stored in the database.
+#def _merge_fields(productdata, datafields, lang):
+#    field_types = {f.name: f.field_type for f in Field.query.all()}
+#    for df in datafields:
+#        field_type = field_types.get(df.get('name'))
+#        if field_type in Field.text_types:
+#            df['value'], value = {}, df.get('value') # uploaded value
+#            #if product.data and product.data.fields:
+#            for pf in productdata['fields']:
+#                if pf.get('name')==df['name']:
+#                    df['value'] = pf.get('value', {}) # localized values
+#            df['value'][lang] = value # merge localized and uploaded value 
+#    productdata['fields'] = datafields
+
+
 def _merge_fields(productdata, datafields, lang):
-    field_types = {f.name: f.field_type for f in Field.query.all()}
     for df in datafields:
-        field_type = field_types.get(df.get('name'))
-        if field_type in Field.text_types:
-            df['value'], value = {}, df.get('value') # uploaded value
-            #if product.data and product.data.fields:
+        if df['field_type'] in Field.text_types:
+            # we extract the uploaded value and we reset the field value
+            # to an empty dict, ready to take localized values
+            df['value'], value = {}, df.get('value')
+
+            # now we search if the product already has an existing field with
+            # the same name
             for pf in productdata['fields']:
+                # if we find a matching field we give its (localized) value
+                # to our just uploaded field's value
                 if pf.get('name')==df['name']:
-                    df['value'] = pf.get('value', {}) # localized values
-            df['value'][lang] = value # merge localized and uploaded value 
+                    df['value'] = pf.get('value', {})
+            # now whether the field was already present or not
+            # we set the uploaded value as a localized value
+            df['value'][lang] = value
+
+    # we're now ready to replace the old fields with the new data set
     productdata['fields'] = datafields
 
 
@@ -254,15 +323,17 @@ def post_product(data, lang):
     except vno_err.ValidationErrorStack as e:
         raise
         abort(400, 'Invalid data ' + str(e))
-    app.logger.info(data)
     p = Product(data={'fields': []})
     #record(**data)
     populate_product(p, data, lang)
     db.session.add(p)
     db_flush()
-    redirect_url = url_for('api.get_product', product_id=p.product_id)
-    return {'product_id': p.product_id, 
-            'location': redirect_url}, 201, [('Location', redirect_url)]
+    location = url_for('api.get_product', product_id=p.product_id, partial=False)
+    rv = hal()
+    rv._l('location', location)
+    rv._k('product_id', p.product_id)
+
+    return rv.document, 201, [('Location', location)]
 
 @route('/products/<product_id>', methods=['PUT'], expects_data=True,
        expects_lang=True)

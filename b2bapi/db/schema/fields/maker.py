@@ -1,6 +1,7 @@
 schema = {
     "name": "makers",
     "field_type": "SINGLE_CHOICE",
+    "control": "select",
     "schema": {
         "label": {"en": "Maker", "fr":"Fabriquant"},
         "options": [

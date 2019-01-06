@@ -37,7 +37,7 @@ field_arr = arr(
 #).apply_to('data')
 
 data_val = obj(
-    prim().apply_to('name', 'description', 'number')
+    arr().apply_to('fields')
 ).apply_to('data')
 
 
