@@ -2,7 +2,7 @@ import uuid
 import simplejson as json
 import copy
 
-from flask import redirect, g, current_app as app, abort, url_for
+from flask import redirect, g, current_app as app, url_for
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
@@ -313,7 +313,7 @@ def db_flush():
         db.session.flush()
     except sql_exc.IntegrityError as e:
         db.session.rollback()
-        abort(400, 'Problem with the saving of data')
+        json_abort(400, {'error': 'Problem while saving data'})
 
 @route('/products', methods=['POST'], expects_data=True, expects_lang=True)
 def post_product(data, lang):
@@ -322,7 +322,7 @@ def post_product(data, lang):
         data = add_product.validate(data)
     except vno_err.ValidationErrorStack as e:
         raise
-        abort(400, 'Invalid data ' + str(e))
+    json_abort(400, {'error': 'Invalid data ' + str(e)})
     p = Product(data={'fields': []})
     #record(**data)
     populate_product(p, data, lang)
@@ -335,14 +335,35 @@ def post_product(data, lang):
 
     return rv.document, 201, [('Location', location)]
 
+
 @route('/products/<product_id>', methods=['PUT'], expects_data=True,
-       expects_lang=True)
-def put_product(product_id, data, lang):
+       authenticate=True, expects_tenant=True, expects_lang=True)
+def put_product(product_id, data, tenant, lang):
     data = edit_product.validate(data)
-    p = _get_product(product_id)
+    p = _get_product(product_id, tenant.tenant_id)
     populate_product(p, data, lang)
+
+    #filters = data.pop('filters', [])
+    #data.pop('data', None)
+    #p.populate(**data)
+
+    #try:
+    #    for i,f in enumerate(fields):
+    #        try:
+    #            val = p.data.setdefault('fields', [])[i]
+    #            val['en'] = f
+    #        except IndexError:
+    #            val = {'en': f}
+    #            p.data.setdefault('fields', []).append(val)
+    #except:
+    #    json_abort(400, {'error':'Bad Format'})
+
+    #p.filters = Filter.query.filter(Filter.filter_id.in_(filters)).all()
+
     db_flush()
-    return None, 204, []
+    return {}, 200, []
+
+
 
 @route('/products/<product_id>', methods=['DELETE'])
 def delete_product(product_id):

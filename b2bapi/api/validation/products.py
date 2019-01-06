@@ -15,19 +15,21 @@ field_schema = obj(
     # They must be a boolean.
     prim(required(default=set_value(False)), check_bool).apply_to(
          'searchable', 'display'), 
+    #TODO: we need a flexible validator that can handle values, arrays
+    # and objects
     #prim(~required).apply_to('value'),
     #prim(~required, remove).apply_to('properties'),
 )
 
 field_arr = arr(
-    # the array of fields is not required 
+    # the array of fields is not required (inside the `data`)
     ~required,
     # if set to null the value will be set to `[]` as a failsafe
     rejectnull(failsafe=set_value([])),
-    # each item in the range 0-20 of the array will be applied the
-    # `field_schema` 
-    field_schema.apply_to(range(0,20)), 
-    # the fields array can be empty 
+    # each item in the range 0-20 of the array will be validated using the
+    # `field_schema`
+    field_schema.apply_to(range(0,20)),
+    # the resulting field array can be empty 
     allowempty,
 )
 
@@ -47,20 +49,18 @@ add_product = obj(
     prim(required(default=set_uuid), rejectnull(failsafe=set_uuid), 
          check_uuid4).apply_to('product_id'),
     prim(required(default=set_value(False)), check_bool).apply_to('visible'),
-    prim(required(default=set_value(True)), check_bool).apply_to('available'),
     # TODO make sure the product_family exists
     #prim(required(default=set_value(None))).apply_to('product_family_id'),
     # overriding the more permissive requirement statement on `fields`
-    data_val,
+    obj(arr().apply_to('fields')).apply_to('data'),
 )
 
 # TODO: add an extrafield blocker
 edit_product = obj(
     prim(~required, remove).apply_to(
         'product_id', 'tenant_id', 'self'),
-    prim(~required, check_bool).apply_to('publish'),
+    prim(~required, check_bool).apply_to('visible'),
     # TODO make sure the product_family exists
     #prim(~required).apply_to('product_family_id'),
-    field_arr.apply_to('fields'),
+    obj(field_arr.apply_to('fields')).apply_to('data'),
 )
-
