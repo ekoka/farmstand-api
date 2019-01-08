@@ -3,7 +3,7 @@ from vino.processors import validating as vld
 from vino.processors.validating import required, rejectnull, allowempty
 
 from . import (set_tenant, check_bool, check_uuid4,  set_uuid, 
-               upper, remove, set_default, set_value)
+               upper, remove, set_value)
 
 # each field is an object
 field_schema = obj( 
@@ -63,4 +63,18 @@ edit_product = obj(
     # TODO make sure the product_family exists
     #prim(~required).apply_to('product_family_id'),
     obj(field_arr.apply_to('fields')).apply_to('data'),
+)
+
+edit_product_members = obj(
+    prim(~required).apply_to('visible'),
+    obj(
+        ~required,
+        arr(
+            ~required,
+            obj(
+                prim(required).apply_to('name', 'value', 'field_type'),
+                prim(required(default=set_value(False)), check_bool).apply_to('display'),
+            ).apply_to(range(0,20))
+        ).apply_to('fields')
+    ).apply_to('data'),
 )

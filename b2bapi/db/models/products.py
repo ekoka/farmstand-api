@@ -45,6 +45,8 @@ class Product(db.Model, db.TenantMixin):
 
     product_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     visible = db.Column(db.Boolean, default=False)
+    # TODO: fields to add:  
+    #    logs: date_added, date_updated, updated_by
     data = db.Column(db.JSONB, default=dict)
     """
     {

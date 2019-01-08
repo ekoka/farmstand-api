@@ -14,24 +14,42 @@ from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.schema import generic as product_schema
 from ._route import route, json_abort, hal
 
-from .validation.products import (add_product, edit_product)
+from .validation.products import (add_product, edit_product, edit_product_members)
 
-@route('/products', methods=['GET'], expects_params=True, expects_lang=True)
-def get_products(params, lang):
-    max_id = None
-    min_id = None
-    tenant_id = g.tenant['tenant_id']
+#@route('/products', methods=['GET'], expects_params=True, expects_lang=True)
+#def get_products(params, lang):
+#    max_id = None
+#    min_id = None
+#    tenant_id = g.tenant['tenant_id']
+#    q = Product.query.filter_by(tenant_id=tenant_id)
+#    if params.get('filters'): 
+#        filters = json.loads(params['filters'])
+#        q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
+#    #_p_order = lambda p: p.data['fields_order'][0]
+#    products = q.all()
+#    rv = {
+#        'self': url_for('api.get_products',**params),
+#        'products': [_product_summary(p, lang) for p in products],
+#    }
+#    return rv, 200, []
+
+@route('/products', expects_params=True, expects_tenant=True,
+       authenticate=True, expects_lang=True)
+def get_products(params, tenant, lang):
+    tenant_id = tenant.tenant_id
     q = Product.query.filter_by(tenant_id=tenant_id)
-    if params.get('filters'): 
-        filters = json.loads(params['filters'])
-        q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
-    #_p_order = lambda p: p.data['fields_order'][0]
+    #if params.get('filters'): 
+    #    filters = json.loads(params['filters'])
+    #    q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
     products = q.all()
-    rv = {
-        'self': url_for('api.get_products',**params),
-        'products': [_product_summary(p, lang) for p in products],
-    }
-    return rv, 200, []
+    product_url = url_for('api.get_product', product_id='{product_id}')
+    rv = hal()
+    rv._l('self', url_for('api.get_products', **params))
+    rv._l('simpleb2b:product', product_url, unquote=True, templated=True)
+
+    rv._embed('products', [_get_product_resource(p, lang, partial=True)
+                           for p in products])
+    return rv.document, 200, []
 
 def _product_summary(p, lang):
     return {
@@ -177,7 +195,6 @@ def get_product(product_id, tenant, params, lang):
 
 def _localized_product_field(f, lang):
     rv = dict(**f)
-    app.logger.info(rv)
     if f.get('field_type') in Field.text_types:
         rv['value'] = rv.setdefault('value', {}).get(lang)
     return rv
@@ -207,7 +224,8 @@ def _get_product_resource(p, lang, partial=True):
         #rv._k('quantity_unit', p.data.get('quantity_unit'))
         # TODO:
         #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
-        rv._k('data', {'fields': fields})
+
+    rv._k('data', {'fields': fields})
     return rv.document
 
 def _fields(fields, lang):
@@ -317,7 +335,6 @@ def db_flush():
 
 @route('/products', methods=['POST'], expects_data=True, expects_lang=True)
 def post_product(data, lang):
-    app.logger.info(data)
     try:
         data = add_product.validate(data)
     except vno_err.ValidationErrorStack as e:
@@ -363,7 +380,17 @@ def put_product(product_id, data, tenant, lang):
     db_flush()
     return {}, 200, []
 
-
+"""
+For a data to be patched to the product, it must already be present. 
+"""
+@route('/products/<product_id>', methods=['PATCH'], expects_data=True,
+       expects_tenant=True, expects_lang=True, authenticate=True)
+def patch_product(product_id, data, tenant, lang):
+    data = edit_product_members.validate(data)
+    p = _get_product(product_id, tenant.tenant_id)
+    populate_product(p, data, lang)
+    db_flush()
+    return {}, 200, []
 
 @route('/products/<product_id>', methods=['DELETE'])
 def delete_product(product_id):
