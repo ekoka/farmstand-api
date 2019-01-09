@@ -123,7 +123,7 @@ class ProductImage(db.TenantMixin, db.Model):
         ),
     )
 
-class SpcImage:
+class ImageUtil:
     """ Unify file and PIL.Image.Image interfaces and provide additional
     validating functions.
     """
@@ -286,7 +286,7 @@ class SpcImage:
         # it creates.
         web_image.format = source.format
         web_image.thumbnail((web_size, web_size))
-        return SpcImage(web_image, config=config, context=context)
+        return ImageUtil(web_image, config=config, context=context)
 
     def read(self):
         f = self.image_file

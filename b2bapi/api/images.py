@@ -5,26 +5,26 @@ import hashlib
 import os
 from PIL import Image as pilimage
 from libthumbor import CryptoURL
-from flask import g, abort, current_app as app, url_for
+from flask import g, current_app as app, url_for
 from sqlalchemy import exc
 from sqlalchemy.orm import exc as orm_exc
 
-from b2bapi.db.models.images import SourceImage, SpcImage, BaseImage
+from b2bapi.db.models.images import SourceImage, BaseImage, ImageUtil
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 
-from ._route import route
+from ._route import route, url_for, json_abort, hal
 
 @route('/source-images', methods=['POST'], expects_files=['image'],
        expects_tenant=True)
-def post_source_image(tenant=None, image=None):
+def post_source_image(tenant, image=None):
     #record = _get_source_image(image_id)
     # TODO: move this initialization inside POSTing of SourceImage
     source_file = image[0]
     config = app.config['IMAGE']
     try:
-        source_image = SpcImage(
+        source_image = ImageUtil(
             source_file, config=config, context='source')
         image_id = source_image.blob_signature
         try:
@@ -57,23 +57,27 @@ def post_source_image(tenant=None, image=None):
         db.session.rollback()
         raise
         #TODO: more elaborate message
-        abort(405)
-    rv = {
-        'source': APIUrl('api.get_source_image', image_id=image_id),
-        'main_image': APIUrl('api.get_image', image_id=main_base.base_image_id),
-    }
-    return rv, 200, ()
+        json_abort(405, {})
+
+    rv = hal()
+    rv._k('source_image_id', image_id)
+    rv._k('image_id', main_base.base_image_id)
+    rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
+    rv._l('image', url_for('api.get_image', image_id=main_base.base_image_id))
+    
+    return rv.document, 200, ()
 
 @route('images', expects_tenant=True)
 def get_images(tenant):
-    return dict(
-        href=APIUrl('api.get_images'),
-        images=[dict(
-            image_id=i.base_image_id,
-            href=APIUrl('api.get_image', image_id=i.base_image_id),
-        ) for i in BaseImage.query.filter_by(
-            tenant_id=tenant['tenant_id']).all()]
-    ), 200, []
+    rv = hal() 
+    rv._l('self',url_for('api.get_images'))
+    rv._embed('images', [hal()._k('image_id', i.base_image_id)
+                ._l('self', url_for('api.get_image', image_id=i.base_image_id))
+                .document
+                for i in BaseImage.query.filter_by(
+                    tenant_id=tenant['tenant_id']).all()]
+    )
+    return rv.document, 200, []
 
 
 @route('/images/<image_id>', expects_tenant=True)
@@ -81,7 +85,7 @@ def get_image(image_id, tenant):
     try:
         image = BaseImage.query.get((image_id, tenant['tenant_id']))
     except orm_exc.NoResultFound as e:
-        abort(404, 'Image not Found')
+        json_abort(404, {'error':'Image not Found'})
     thumbor_base = 'http://127.0.0.1:9001'
     aspect_ratios = {}
     crypto = CryptoURL(key='MY_SECURE_KEY')
@@ -111,12 +115,11 @@ def get_image(image_id, tenant):
     #)
 
 
-    rv = dict(
-        image_id=image_id,
-        href=APIUrl('api.get_image', image_id=image_id),
-        aspect_ratios=aspect_ratios,
-    )
-    return rv, 200, []
+    rv = hal() 
+    rv._k('image_id', image_id)
+    rv._l('self', url_for('api.get_image', image_id=image_id))
+    rv._k('aspect_ratios', aspect_ratios)
+    return rv.document, 200, []
 
 # NOTE: might not be useful
 @route('/source-images-meta', methods=['POST'], expects_data=True)
@@ -128,7 +131,7 @@ def post_source_image_meta(data):
         db.session.flush()
         image_id = src_img.source_image_id
     except orm_exc.IntegrityError:
-        abort(400)
+        json_abort(400)
 
     rv = {
         "href": APIUrl('api.get_source_image', image_id=image_id),
@@ -138,18 +141,18 @@ def post_source_image_meta(data):
     return rv, 201, [('Location', redirect_url)]
 
 
-def _get_source_image(image_id):
+def _get_source_image(image_id, tenant_id):
     try:
         if image_id is None:
             raise orm_exc.NoResultFound()
         return SourceImage.query.filter_by(
-            source_image_id=image_id, tenant_id=g.tenant['tenant_id']).one()
+            source_image_id=image_id, tenant_id=tenant_id).one()
     except orm_exc.NoResultFound as e:
-        abort(404)
+        json_abort(404, {'error':'Image not found'})
 
-@route('/source-images/<image_id>')
-def get_source_image(image_id):
-    record = _get_source_image(image_id)
+@route('/source-images/<image_id>', expects_tenant=True)
+def get_source_image(image_id, tenant):
+    record = _get_source_image(image_id, tenant['tenant_id'])
     return rv, 200, ()
 
 def get_image_data(image):
@@ -275,7 +278,7 @@ def set_aspect_ratios(base_image):
 #    source_file = image[0]
 #    config = app.config['IMAGE']
 #    try:
-#        source_image = SpcImage(
+#        source_image = ImageUtil(
 #            source_file, config=config, context='source')
 #        web_image = source_image.thumbnail(config['WEB_MAX_LENGTH'],
 #                                           context='web')
@@ -285,7 +288,7 @@ def set_aspect_ratios(base_image):
 #        db.session.flush()
 #    except (IOError, TypeError) as e:
 #        #TODO: more elaborate message
-#        abort(400)
+#        json_abort(400)
 #    rv = {
 #        'status': APIUrl('api.get_source_image_contents', image_id=image_id)
 #    }

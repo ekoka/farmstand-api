@@ -3,6 +3,8 @@
 *config.py
 *config.ini
 gitmsg.gitcommit
+thumbor/thumbor.conf
+thumbor/config.ini
 uwsgi.ini
 logs
 */config/*secret*
