@@ -203,6 +203,7 @@ def _get_product_resource(p, lang, partial=True):
     rv = hal()
     rv._l('self', url_for('api.get_product', product_id=p.product_id,
                           partial=partial))
+    rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
     rv._k('product_id', p.product_id.hex)
     rv._k('visible', p.visible)
     if partial:

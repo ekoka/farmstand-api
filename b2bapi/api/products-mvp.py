@@ -69,7 +69,6 @@ def _get_product(product_id, tenant_id):
 def get_product(product_id, tenant, params):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
-    app.logger.info(partial)
     product = _get_product(product_id, tenant.tenant_id)
     document = _get_product_resource(product, partial=partial)
     return document, 200, []

@@ -9,15 +9,17 @@ from flask import g, current_app as app, url_for
 from sqlalchemy import exc
 from sqlalchemy.orm import exc as orm_exc
 
-from b2bapi.db.models.images import SourceImage, BaseImage, ImageUtil
+from b2bapi.db.models.images import (
+    SourceImage, BaseImage, ImageUtil, ProductImage)
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 
 from ._route import route, url_for, json_abort, hal
+from .validation import images as validators
 
 @route('/source-images', methods=['POST'], expects_files=['image'],
-       expects_tenant=True)
+       expects_tenant=True, authenticate=True)
 def post_source_image(tenant, image=None):
     #record = _get_source_image(image_id)
     # TODO: move this initialization inside POSTing of SourceImage
@@ -67,18 +69,85 @@ def post_source_image(tenant, image=None):
     
     return rv.document, 200, ()
 
-@route('images', expects_tenant=True)
-def get_images(tenant):
-    rv = hal() 
-    rv._l('self',url_for('api.get_images'))
-    rv._embed('images', [hal()._k('image_id', i.base_image_id)
-                ._l('self', url_for('api.get_image', image_id=i.base_image_id))
-                .document
-                for i in BaseImage.query.filter_by(
-                    tenant_id=tenant['tenant_id']).all()]
-    )
+@route('images', expects_tenant=True, expects_params=True, authenticate=True)
+def get_images(tenant, params):
+    params = validators.aspect_ratios.validate(params)
+    rv = hal()
+    rv._l('self',url_for('api.get_images', **params))
+    imgquery = BaseImage.query.filter_by(tenant_id=tenant['tenant_id'])
+    images = []
+    for i in imgquery.all():
+        img_resource = hal()
+        img_resource._k('image_id', i.base_image_id)
+        img_resource._l('self', url_for('api.get_image', image_id=i.base_image_id))
+        if params:
+            img_resource._k('aspect_ratios', img_aspect_ratios(i, **params))
+        images.append(img_resource.document)
+    rv._embed('images', images)
     return rv.document, 200, []
 
+def img_aspect_ratios(image, aspect_ratios=None, sizes=None):
+    # add '0:0' to image's stored aspect ratios and create an aspect ratio
+    # generator.
+    ar_gen =  (ar for ar in itools.chain(
+        [{'name':'0:0'}], image.meta.get('aspect_ratios', [])))
+
+    # make a size generator
+    size_gen = (s for s in (('large',0), ('medium',700),
+                            ('small',300), ('thumb',100)))
+
+    if aspect_ratios:
+        as_list = aspect_ratios
+        # if a list of valid aspect ratios to return is received, filter
+        # the original generator against it and make that the new list.
+        aspect_ratios = [ar for ar in ar_gen if ar['name'] in as_list]
+    else:
+        # otherwise use the data as is.
+        aspect_ratios = [ar for ar in ar_gen]
+
+    if sizes:
+        size_list = sizes
+        # similarly, if a list of valid sizes to return is received, filter
+        # the original size generator against it and use that instead.
+        sizes = [s for s in size_gen if s[0] in size_list]
+    else:
+        sizes = [s for s in size_gen]
+
+    rv = {}
+    #TODO: get this from config
+    crypto = CryptoURL(key='MY_SECURE_KEY')
+    # determine the widest side
+    largest = ('width' if image.meta['width'] >= image.meta['height'] 
+               else 'height')
+    try:
+        # TODO get this from config
+        thumbor_base = 'http://127.0.0.1:9001'
+        for a_r in aspect_ratios:
+            base_options = dict(image_url=image.meta['filename'])
+            # if the a_r we're requesting is not 0:0 (i.e. original size) it
+            # means there's some cropping to do.
+            if a_r['name']!='0:0':
+                base_options['crop'] = ((a_r['A'], a_r['B']),(a_r['C'], a_r['D']))
+            for size_name, size  in sizes:
+                options = dict(**base_options)
+                if size:
+                    options[largest] = min(size, a_r.get(largest, image.meta[largest]))
+                url = crypto.generate(**options)
+                rv.setdefault(a_r['name'], {})[size_name] = f'{thumbor_base}{url}'
+    except Exception as e:
+        raise
+    app.logger.info(rv)
+    return rv
+
+
+def _image_resource(image, **params):
+    aspect_ratios = img_aspect_ratios(image, **params)
+
+    rv = hal() 
+    rv._k('image_id', image.base_image_id)
+    rv._l('self', url_for('api.get_image', image_id=image.base_image_id))
+    rv._k('aspect_ratios', aspect_ratios)
+    return rv
 
 @route('/images/<image_id>', expects_tenant=True)
 def get_image(image_id, tenant):
@@ -86,40 +155,45 @@ def get_image(image_id, tenant):
         image = BaseImage.query.get((image_id, tenant['tenant_id']))
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error':'Image not Found'})
-    thumbor_base = 'http://127.0.0.1:9001'
-    aspect_ratios = {}
-    crypto = CryptoURL(key='MY_SECURE_KEY')
 
-    largest = 'width' if image.meta['width'] >= image.meta['height'] else 'height'
-    try:
-        for ar in itools.chain([{'name':'0:0'}], image.meta.get('aspect_ratios', [])):
-            base_options = dict(image_url=image.meta['filename'])
-            if ar['name']!='0:0':
-                base_options['crop'] = ((ar['A'], ar['B']),(ar['C'], ar['D']))
-            for size_name, size  in dict(
-                large=0, medium=700, small=300, thumb=100).items():
-                options = dict(**base_options)
-                if size:
-                    options[largest] = min(size, ar.get(largest, image.meta[largest]))
-                url = crypto.generate(**options)
-                aspect_ratios.setdefault(ar['name'], {})[size_name] = f'{thumbor_base}{url}'
-    except Exception as e:
-        app.logger.info(e)
-        raise
-
-    #image_url = crypto.generate(
-    #    #width=300,
-    #    #height=200,
-    #    #smart=True,
-    #    image_url=image.meta['filename']
-    #)
-
-
-    rv = hal() 
-    rv._k('image_id', image_id)
-    rv._l('self', url_for('api.get_image', image_id=image_id))
-    rv._k('aspect_ratios', aspect_ratios)
+    rv = _image_resource(image)
     return rv.document, 200, []
+
+@route('/products/<product_id>/images', expects_tenant=True, 
+       authenticate=True, expects_params=True)
+def get_product_images(product_id, tenant, params):
+    product_imgs = ProductImage.query.filter_by(
+        product_id=product_id, tenant_id=tenant['tenant_id']).all()
+    product_imgs.sort(key=lambda pi: pi.data.get('position'))
+    rv = hal()
+    rv._l('self', url_for('api.get_product_images', product_id=product_id))
+    images = [_image_resource(prodimg.image).document 
+              for prodimg in product_imgs]
+    rv._embed('images', images)
+    return rv.document, 200, []
+
+@route('/products/<product_id>/images', methods=['PUT'], expects_tenant=True,
+       expects_data=True, authenticate=True)
+def put_product_images(product_id, tenant, data):
+    db.session.execute(db.text(
+        'delete from product_images '
+        'where product_id=:product_id and tenant_id=:tenant_id'
+    ), {'product_id': product_id, 'tenant_id': tenant['tenant_id']})
+
+    #TODO: validation
+    for position, image_id in enumerate(data):
+        db.session.add(ProductImage(
+            tenant_id=tenant.tenant_id,
+            product_id=product_id,
+            base_image_id=image_id,
+            data={'position':position}))
+
+    db.session.flush()
+    return {}, 200, []
+
+
+
+
 
 # NOTE: might not be useful
 @route('/source-images-meta', methods=['POST'], expects_data=True)
@@ -218,6 +292,7 @@ def set_aspect_ratios(base_image):
     aspect_ratios = ['1:1', '5:4', '4:3', '3:2', '16:9', '3:1']
     base_image.meta['aspect_ratios'] = [
         crop_to_aspect_ratio(ar, base_image.meta) for ar in aspect_ratios]
+
 
 #def generate_main_image(source_image):
 #    aspect_ratios = ['1:1', '5:4', '4:3', '3:2', '16:9', '3:1']

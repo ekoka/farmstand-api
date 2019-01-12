@@ -11,6 +11,16 @@ from flask import g
 def set_value(value):
     return lambda*a,**k: value
 
+def has_any(*values):
+    def rv(data, state=None):
+        if data in values:
+            return data
+        raise vno_err.ValidationError(f'"{data}" is not in {values}')
+    return rv
+
+valid_values = has_any
+
+
 def set_tenant(*a, **k):
     return g.tenant['tenant_id']
 
@@ -30,7 +40,7 @@ def check_uuid4(data, state=None):
     except ValueError:
         raise vno_err.ValidationError('Invalid UUID')
 
-def set_uuid(data, state):
+def set_uuid(data, state=None):
     return uuid.uuid4().hex
 
                                                                                 

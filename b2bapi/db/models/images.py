@@ -1,4 +1,5 @@
 from PIL import Image as pilimage
+from uuid import uuid4
 import io
 import contextlib
 import os
@@ -96,7 +97,7 @@ class ProductImage(db.TenantMixin, db.Model):
     __abstract__ = False
     __tablename__ = 'product_images'
 
-    product_image_id = db.Column(db.Integer, primary_key=True)
+    product_image_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     product_id = db.Column(None)
     base_image_id = db.Column(None)
     data = db.Column(db.JSONB) # defaults to ImageFormat.data
@@ -112,8 +113,6 @@ class ProductImage(db.TenantMixin, db.Model):
             },...
     } """
 
-    
-
     __table_args__ = (
         db.ForeignKeyConstraint([product_id, 'tenant_id'], 
                                 ['products.product_id', 'products.tenant_id']),
@@ -122,6 +121,9 @@ class ProductImage(db.TenantMixin, db.Model):
             ['base_images.base_image_id', 'base_images.tenant_id']
         ),
     )
+
+    image = db.relationship('BaseImage')
+    product = db.relationship('Product')
 
 class ImageUtil:
     """ Unify file and PIL.Image.Image interfaces and provide additional

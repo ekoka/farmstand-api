@@ -339,8 +339,8 @@ api_actions = {}
 def json_response_wrapper(fnc):
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
+        data = fnc(*a, **kw)
         try:
-            data = fnc(*a, **kw)
             data, status, headers = data
         except ValueError as e: # (too many|need more) values to unpack 
             status, headers = 200, []

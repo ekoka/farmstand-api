@@ -37,7 +37,7 @@ def with_clause(element, compiler, **kw):
 class ProductSchema(db.Model, db.TenantMixin):
     __tablename__ = 'product_schema'
 
-    product_schema_id = db.Column(db.UUID, primary_key=True)
+    product_schema_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     data = db.Column(db.JSONB, default=dict)
 
 class Product(db.Model, db.TenantMixin):
@@ -74,7 +74,7 @@ class ProductFamily(db.Model, db.TenantMixin):
     """
     __tablename__ = 'product_families'
 
-    product_family_id = db.Column(db.UUID, primary_key=True)
+    product_family_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     main_product_id = db.Column(None)
 
     __table_args__ = (
