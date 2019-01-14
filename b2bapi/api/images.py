@@ -136,7 +136,6 @@ def img_aspect_ratios(image, aspect_ratios=None, sizes=None):
                 rv.setdefault(a_r['name'], {})[size_name] = f'{thumbor_base}{url}'
     except Exception as e:
         raise
-    app.logger.info(rv)
     return rv
 
 

@@ -13,6 +13,9 @@ from b2bapi.db.models.meta import ProductType, Field
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.schema import generic as product_schema
 from ._route import route, json_abort, hal
+from .product_utils import (
+    _localize_fields, _localized_product_field, patch_record,
+)
 
 from .validation.products import (add_product, edit_product, edit_product_members)
 
@@ -193,12 +196,6 @@ def get_product(product_id, tenant, params, lang):
     document = _get_product_resource(product, lang, partial=partial)
     return document, 200, []
 
-def _localized_product_field(f, lang):
-    rv = dict(**f)
-    if f.get('field_type') in Field.text_types:
-        rv['value'] = rv.setdefault('value', {}).get(lang)
-    return rv
-
 def _get_product_resource(p, lang, partial=True):
     rv = hal()
     rv._l('self', url_for('api.get_product', product_id=p.product_id,
@@ -276,6 +273,7 @@ def hydrate_field(product_field, field):
     }
 
 
+
 def populate_product(product, data, lang):
     for k,v in data.items():
         if k=='data':
@@ -306,9 +304,11 @@ def populate_product(product, data, lang):
 
 
 def _merge_fields(productdata, datafields, lang):
+    # loop through the uploaded fields
     for df in datafields:
+        # if field is a text type
         if df['field_type'] in Field.text_types:
-            # we extract the uploaded value and we reset the field value
+            # extract the uploaded value and reset the field value
             # to an empty dict, ready to take localized values
             df['value'], value = {}, df.get('value')
 
@@ -339,8 +339,7 @@ def post_product(data, lang):
     try:
         data = add_product.validate(data)
     except vno_err.ValidationErrorStack as e:
-        raise
-    json_abort(400, {'error': 'Invalid data ' + str(e)})
+        json_abort(400, {'error': 'Invalid data ' + str(e)})
     p = Product(data={'fields': []})
     #record(**data)
     populate_product(p, data, lang)
@@ -387,9 +386,14 @@ For a data to be patched to the product, it must already be present.
 @route('/products/<product_id>', methods=['PATCH'], expects_data=True,
        expects_tenant=True, expects_lang=True, authenticate=True)
 def patch_product(product_id, data, tenant, lang):
-    data = edit_product_members.validate(data)
+    #data = edit_product_members.validate(data)
     p = _get_product(product_id, tenant.tenant_id)
-    populate_product(p, data, lang)
+    try:
+        _localize_fields(data, lang)
+    except (ValueError, AttributeError, TypeError):
+        raise
+        json_abort(400, {'error': 'Bad format'})
+    patch_record(p, data)
     db_flush()
     return {}, 200, []
 
