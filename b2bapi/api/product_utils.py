@@ -1,3 +1,59 @@
+from b2bapi.db.models.meta import Field
+
+"""
+NOTE: There's not yet a clear understanding of how values in lists should be 
+handled.
+Some possibilities:
+    - just assign the entire list to the specified key/attribute
+    - assign a flag as the first item in the list that specifies how it should
+    be handled (e.g. named dict, etc).
+    - traverse the list and for each item determine if the existing list has a 
+    corresponding type (how and what to do when it doesn't, sounds complicated).
+Some consideration
+------------------
+Changing values atomically in a list would be too complicated if the indices of the 
+new items determine their position in the target. Thus a way to specify the position
+of the item would be ideal. Only a dict can allow this kind of representation natively.
+So the list's data would be specified as if it's a dict.
+
+    {'data': {
+        'somelist': {
+            0: 'foo',  # replace the value at 0 by 'foo'
+            3: 'bar'    # replace the value at 3 by 'bar'
+        }
+    }}
+
+What happens if the specified index doesn't exist in the list?
+
+----
+A sounder approach:
+    - the use of list is standardized around two groups of data types: the
+    first includes only dicts, the other is made up of the remaining common 
+    types, that is, simple types (bool, number, string) and lists.
+    - a dict cannot be placed in a list of items and items cannot be in a 
+    list of dicts.
+    - this implies that if a list contains a dict, all other items of that
+    list must also be dicts.
+    - a list can thus only keep items of a single group at a time.
+    - if a structure is needed to keep data of varying types, a dict can be
+    used to that effect.
+    - all dicts in lists must have an identifying key (default to 'name' if
+    not configured), that is, only named dicts can be stored inside lists.
+    - changes to dicts in a list are made atomically.
+    - whereas the data tree sprouting from a list of simple items is just
+    assigned to the attribute as a whole.
+    - although lists can also be directly nested in other lists, it would
+    probably be advisable to use an alternative structure, unless really
+    necesary. 
+    This is because, since list of simple are simply assigned to an attribute,
+    if an inner list happens to have a more complex structure (e.g. a dict in
+    a list in a list), it will simply be part of the assigned "chunk" of data.
+    It will not be possible to atomically update that structure, since there
+    won't be a way to specify the positioning of the child list and thus to
+    navigate to any of its children. So use direct nested lists with a caveat.
+
+"""
+
 def _localized_product_field(field, lang):
     rv = dict(**field)
     if field.get('field_type') in Field.text_types:
@@ -45,8 +101,11 @@ def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
     # test if the new key is valid with the resolved leaf
     try:
         if ordered_dict:
-            return [index for index,l in enumerate(leaf) 
-                    if l.get('name')==key][0]
+            try:
+                return [index for index,l in enumerate(leaf) 
+                        if l.get('name')==key][0]
+            except IndexError:
+                raise KeyError
         else:
             leaf = leaf[key]
             return True
@@ -109,46 +168,63 @@ def patch_record(record, data, keymap=None):
 
     not_strict = False
 
+    objlist = False
+
     try:
         # First, try to treat data as a dict.
         for k,v in data.items():
-            # since it went through, assume data is a dict
-            # verify that the key is valid on record
-            try:
-                valid = validatekey(
-                    record, k, validkeys=keymap, strict_keys=not_strict)
-            except Mismatch:
-                app.logger.info('Mismatch raised')
-                # abort the entire operation
-                raise TypeError()
+            # since it went through, assume data is a dict.
+            # verify that key is valid on existing record.
+            # validatekey will raise an error on an invalid key (e.g. key does
+            # not exist as a base field on the record) 
+            valid = validatekey(
+                record, k, validkeys=keymap, strict_keys=not_strict)
 
             if valid is None:
-                # the key did not exist but was consistent with the data type.
-                # set the value on the new key
+                # the special case where the key did not exist on the part of
+                # the record that it was tested on, but access method was
+                # consistent with the data type (e.g. a JSON object's field).
+                # Set the value on the new key.
                 setval(record, keymap, k, v)
                 # go to next data item
                 continue
 
-            # the key exists
+            # the key exists in the record
             keymap.append(k)
             # recursively try to assign the value to it 
             patch_record(record, v, keymap)
-            # assuming the value has been assigned, pop the key
+            # the value has now been assigned, pop the key
             keymap.pop(-1)
-    except AttributeError: # not a dict
-        try:
-            # Second, try to treat data as a list of named objects.
+    except AttributeError: # data is not a dict
+        try: # Second, try to treat data as a string or a list of named objects.
+
+            # is it a string?
+            if type(data) is str:
+                # if this is a string, just assign and end right here
+                setval(record, keymap, None, data)
+                return
+
+            # try iterating
             for obj in data:
-                key = obj['name']
-                    
+                # if it went through, it's a listlike structure
                 try:
-                    # find the index of the object in current field 
-                    index = validatekey(
-                        record, key, validkeys=keymap, strict_keys=not_strict,
-                        ordered_dict=True)
-                except Mismatch:
-                    # abort the entire operation
-                    raise TypeError()
+                    # is it a sequence of dict?
+                    key = obj['name']
+                except KeyError:
+                    # dict's key access method was recognized, but the key was
+                    # not found.
+                    # raise because it violates the convention that any dict 
+                    # in a list must have an identifying key (defaults to
+                    # 'name').
+                    raise Mismatch('Missing identifier key in object')
+
+                # turn on the object list behavior flag
+                objlist = True
+
+                # find the index of the object in current field 
+                index = validatekey(
+                    record, key, validkeys=keymap, strict_keys=not_strict,
+                    ordered_dict=True)
 
                 if index is None:
                     # obj did not exist inside the list, add it
@@ -158,8 +234,40 @@ def patch_record(record, data, keymap=None):
 
                 # index exists
                 keymap.append(index)
+                # recursive patching
                 patch_record(record, obj, keymap)
+                # value has been assigned, pop and move on.
                 keymap.pop(-1)
-        except (TypeError, KeyError): # not a list of named objects
-            # Finally, treat data as a simple value.
+
+            # iteration on object list completed properly, turn off the flag.
+            objlist = False
+        except TypeError: # not a list of named objects
+            mixing_error = ('Badly formed data. Probable mix of objects '
+                            'with simpler data types')
+            if objlist is True:
+                # the previous list iteration did not complete properly,
+                # maybe because one item in the sequence was not an object.
+                raise Mismatch(mixing_error)
+
+            try:
+                # should raise a TypeError error if not a list, that's fine.
+                for item in data:
+                    try:
+                        # should raise a TypeError, as there shouldn't be any
+                        # object included as part of the list.
+                        item['key']
+                    except TypeError:
+                        # good, skip to next item.
+                       continue 
+                    except KeyError:
+                        # not good, because it implies that even though 'key'
+                        # was not found item is still a dict.
+                        # let slip toward the Mismatch error.
+                        pass
+                    # badly formed data.
+                    raise Mismatch(mixing_error)
+            except TypeError:
+                pass
+
+            # Finally, treat data as a simple value or list of values.
             setval(record, keymap, None, data)

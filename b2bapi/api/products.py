@@ -14,7 +14,7 @@ from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.schema import generic as product_schema
 from ._route import route, json_abort, hal
 from .product_utils import (
-    _localize_fields, _localized_product_field, patch_record,
+    _localize_fields, _localized_product_field, patch_record, Mismatch
 )
 
 from .validation.products import (add_product, edit_product, edit_product_members)
@@ -393,7 +393,13 @@ def patch_product(product_id, data, tenant, lang):
     except (ValueError, AttributeError, TypeError):
         raise
         json_abort(400, {'error': 'Bad format'})
-    patch_record(p, data)
+
+    try:
+        patch_record(p, data)
+    except Mismatch:
+        db.session.rollback()
+        json_abort(400, {'error': 'Badly formed data'})
+
     db_flush()
     return {}, 200, []
 
