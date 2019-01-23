@@ -57,7 +57,7 @@ def _get_tenant_resource(tenant, partial=False):
     tenant_url = url_for('api.get_tenant', tname=tenant.name)
     #account_url = url_for('api.get_account', account_id=tenant.account_id)
     product_schema_url = url_for('api.get_product_schema', tenant=tenant.name)
-    filter_set_url = url_for('api.get_filter_sets', tenant=tenant.name)
+    filters_url = url_for('api.get_filters', tenant=tenant.name)
     products_url = url_for('api.get_products', tenant=tenant.name)
     product_url = url_for('api.get_product', tenant=tenant.name, 
                           product_id='{product_id}')
@@ -68,7 +68,7 @@ def _get_tenant_resource(tenant, partial=False):
     rv._k('name', tenant.name)
     #rv._l('simpleb2b:account', account_url)
     rv._l('simpleb2b:product_schema', product_schema_url)
-    rv._l('simpleb2b:filter_sets', filter_set_url)
+    rv._l('simpleb2b:filters', filters_url)
     rv._l('simpleb2b:products', products_url)
     rv._l('simpleb2b:source_images', source_images_url)
     rv._l('simpleb2b:images', images_url)

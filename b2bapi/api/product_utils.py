@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from b2bapi.db.models.meta import Field
 
 """
@@ -271,3 +273,40 @@ def patch_record(record, data, keymap=None):
 
             # Finally, treat data as a simple value or list of values.
             setval(record, keymap, None, data)
+
+
+def _localize_data(data, fields, lang):
+    rv = deepcopy(data) 
+    for field in fields: 
+        path = field.split('.')
+        val = rv
+        for p in path[:-1]:
+            val = val.setdefault(p, {})
+        # reset last value to a localized dict
+        val[path[-1]] = {lang: val.get(path[-1])}
+    return rv
+    
+def _merge_localized_data(old, new, fields, lang):
+    for field in fields:
+        path = field.split('.')
+        oldval = old
+        newval = new
+        for p in path[:-1]:
+            oldval = oldval.setdefault(p, {})
+            newval = newval.setdefault(p, {})
+        oldval.setdefault(path[-1], {})[lang] = newval.get(path[-1])
+    return oldval
+            
+def _delocalize_data(data, fields, lang):
+    rv = deepcopy(data)
+    for field in fields: 
+        # create a map for each localized field
+        path = field.split('.')
+        # resolve the value of the item before last on the map 
+        # i.e. before the item containing the localized data
+        val = rv
+        for p in path[:-1]:
+            val = val.setdefault(p, {})
+        # replace the value of the last item by its localized version
+        val[path[-1]] = val.get(path[-1], {}).get(lang)
+    return rv

@@ -7,7 +7,7 @@ from vino import errors as vno_err
 
 from b2bapi.db import db
 from b2bapi.db.models.products import Product, ProductSchema as PSchema
-from b2bapi.db.models.filters import Filter, FilterSet as FSet
+from b2bapi.db.models.filters import Filter, FilterOption
 from b2bapi.utils.uuid import clean_uuid
 from .._route import route, json_abort, hal
 

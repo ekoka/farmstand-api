@@ -16,6 +16,7 @@ from ._route import route, json_abort, hal
 from .product_utils import (
     _localize_fields, _localized_product_field, patch_record, Mismatch
 )
+from .images import img_aspect_ratios
 
 from .validation.products import (add_product, edit_product, edit_product_members)
 
@@ -203,6 +204,12 @@ def _get_product_resource(p, lang, partial=True):
     rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
     rv._k('product_id', p.product_id.hex)
     rv._k('visible', p.visible)
+
+    rv._k('images', [img_aspect_ratios(
+        i.image, aspect_ratios=['1:1'], sizes=['thumb', 'medium'])
+        for i in p.images
+    ])
+
     if partial:
         # we set the `partial` flag on partial representations. HAL allows
         # for some inconsistencies between representations of the same 

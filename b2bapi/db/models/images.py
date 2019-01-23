@@ -122,8 +122,8 @@ class ProductImage(db.TenantMixin, db.Model):
         ),
     )
 
-    image = db.relationship('BaseImage')
-    product = db.relationship('Product')
+    image = db.relationship('BaseImage', backref="products", viewonly=True)
+    product = db.relationship('Product', backref="images")
 
 class ImageUtil:
     """ Unify file and PIL.Image.Image interfaces and provide additional
