@@ -42,19 +42,12 @@ from .validation.products import (add_product, edit_product, edit_product_member
        authenticate=True, expects_lang=True, readonly=True)
 def get_products(params, tenant, lang):
     tenant_id = tenant.tenant_id
-    q = Product.query.filter_by(tenant_id=tenant_id)
-    #if params.get('filters'): 
-    #    filters = json.loads(params['filters'])
-    #    q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
-    products = q.all()
+    products = db.session.query(Product.product_id).filter_by(tenant_id=tenant_id)
     product_url = url_for('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', url_for('api.get_products', **params))
     rv._l('simpleb2b:product', product_url, unquote=True, templated=True)
-
-    rv._embed('products', [_get_product_resource(p, lang, partial=True)
-                           for p in products])
-    rv._k('products', [p.product_id for p in products])
+    rv._k('product_ids', [p.product_id for p in products])
     return rv.document, 200, []
 
 def _product_summary(p, lang):
@@ -420,7 +413,7 @@ def put_product_filters(product_id, data, tenant):
        authenticate=True, expects_lang=True)
 def get_product_details(tenant, lang, params):
     #TODO: validate params
-    product_ids = params.get('pid')
+    product_ids = params.getlist('pid')
     rv = hal()
     rv._l('self', url_for('api.get_product_details'))
     products = Product.query.filter(

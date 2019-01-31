@@ -61,6 +61,7 @@ def _get_tenant_resource(tenant, partial=False):
     products_url = url_for('api.get_products', tenant=tenant.name)
     product_url = url_for('api.get_product', tenant=tenant.name, 
                           product_id='{product_id}')
+    product_details_url = url_for('api.get_product_details', tenant=tenant.name)
     source_images_url = url_for('api.post_source_image', tenant=tenant.name)
     images_url = url_for('api.get_images', tenant=tenant.name)
     #inquiries_url = url_for('api.get_inquiries', tenant=tenant.name)
@@ -74,6 +75,7 @@ def _get_tenant_resource(tenant, partial=False):
     rv._l('simpleb2b:images', images_url)
     #rv._l('simpleb2b:inquiries', inquiries_url)
     rv._l('simpleb2b:product', product_url, unquote=True, templated=True )
+    rv._l('simpleb2b:product_details', product_details_url)
     if partial:
         return rv._k('_partial', True).document
 
