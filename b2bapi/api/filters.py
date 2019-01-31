@@ -66,7 +66,6 @@ def _sync_options(f, options, lang, tenant_id):
     deleted = tuple(existing_option_ids.difference(new_option_ids))
     # delete all relations to products
     if deleted:
-        app.logger.info(deleted)
         clause = db.text(
             'delete from products_filter_options '
             'where tenant_id=:tenant_id '
@@ -171,13 +170,6 @@ def get_filter(filter_id, lang, tenant):
        authenticate=True)
 def delete_filter(filter_id, tenant):
     try:
-        #db.session.execute(
-        #    'DELETE FROM filter_options WHERE tenant_id=:tenant_id ' 
-        #    'AND filter_id=:filter_id ',
-        #    {
-        #        'tenant_id':tenant.tenant_id, 
-        #        'filter_id':filter_id,
-        #    })
         db.session.execute(
             'DELETE FROM filters WHERE tenant_id=:tenant_id ' 
             'AND filter_id=:filter_id ',
@@ -193,13 +185,16 @@ def delete_filter(filter_id, tenant):
 def _filter_option_resource(filter_option, lang):
     f_o = filter_option
     rv = hal()
-    #rv._l('self', url_for(
-    #    'api.get_filter_option', filter_id=f_o.filter_id, 
-    #    filter_option_id=f_o.filter_option_id))
+    rv._l('self', url_for('api.get_filter_option', filter_id=f_o.filter_id,
+                          filter_option_id=f_o.filter_option_id))
+    rv._l('products', url_for(
+        'api.put_filter_option_products', filter_id=f_o.filter_id,
+        filter_option_id=f_o.filter_option_id))
     #if not partial:
     #    rv._l('filter', url_for('api.get_filter', filter_id=f_o.filter_id))
     rv._k('filter_option_id', f_o.filter_option_id)
     rv._k('data', _delocalize_data(f_o.data, ['label'], lang))
+    rv._k('products', [p.product_id for p in filter_option.products])
     return rv.document
 
 @route('/filters/<filter_id>/options', methods=['POST'], expects_lang=True,
@@ -223,9 +218,11 @@ def post_filter_option(filter_id, data, lang, tenant):
 
 def _get_filter_option(filter_id, filter_option_id, tenant_id):
     try:
-        f_o = FilterOption.query.filter_by(
-            filter_id=filter_id, filter_option_id=filter_option_id,
-            tenant_id=tenant_id).one()
+        f_o = FilterOption.query.filter(
+            FilterOption.filter_id==filter_id, 
+            FilterOption.filter_option_id==filter_option_id,
+            FilterOption.tenant_id==tenant_id).one()
+        return f_o
     except:
         json_abort(404, {'error': 'Filter option not found'})
 
@@ -233,7 +230,7 @@ def _get_filter_option(filter_id, filter_option_id, tenant_id):
        expects_tenant=True, expects_lang=True)
 def get_filter_option(filter_id, filter_option_id, lang, tenant):
     f_o = _get_filter_option(filter_id, filter_option_id, tenant.tenant_id)
-    rv = _filter_option_resource(f_o, lang, partial=False)
+    rv = _filter_option_resource(f_o, lang)
     return rv, 200, []
 
 @route('/filters/<filter_id>/options/<filter_option_id>', authenticate=True,
@@ -266,6 +263,40 @@ def delete_filter_option(filter_id, filter_option_id, tenant):
         db.session.rollback()
     return {}, 200, []
 
+@route('/filters/<filter_id>/options/<filter_option_id>/products',
+       methods=['PUT'], expects_tenant=True, expects_data=True,
+       authenticate=True)
+def put_filter_option_products(filter_id, filter_option_id, tenant, data):
+    f_o = _get_filter_option(filter_id, filter_option_id, tenant.tenant_id)
+    try:
+        db.session.execute(
+            'DELETE FROM products_filter_options WHERE tenant_id=:tenant_id ' 
+            'AND filter_option_id=:filter_option_id',
+            {
+                'tenant_id':tenant.tenant_id, 
+                'filter_option_id':filter_option_id
+            })
+    except: 
+        db.session.rollback()
+        raise
+        #json_abort(400, {'error': 'Bad format'})
+
+    new = [{
+        'tenant_id': tenant.tenant_id, 
+        'filter_option_id': filter_option_id, 
+        'product_id': product_id} for product_id in data.get('products', [])]
+
+    if new:
+        db.session.execute(
+            'insert into products_filter_options '
+            '(tenant_id, filter_option_id, product_id) values '
+            '(:tenant_id, :filter_option_id, :product_id)', new)
+
+    try:
+        db.session.flush()
+    except:
+        db.session.rollback()
+    return {}, 200, []
 
 
 # def _create_filter_sets(tenant_id):

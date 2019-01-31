@@ -10,6 +10,7 @@ from vino import errors as vno_err
 from b2bapi.db import db
 from b2bapi.db.models.products import Product
 from b2bapi.db.models.meta import ProductType, Field
+from b2bapi.db.models.filters import FilterOption
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.schema import generic as product_schema
 from ._route import route, json_abort, hal
@@ -38,7 +39,7 @@ from .validation.products import (add_product, edit_product, edit_product_member
 #    return rv, 200, []
 
 @route('/products', expects_params=True, expects_tenant=True,
-       authenticate=True, expects_lang=True)
+       authenticate=True, expects_lang=True, readonly=True)
 def get_products(params, tenant, lang):
     tenant_id = tenant.tenant_id
     q = Product.query.filter_by(tenant_id=tenant_id)
@@ -53,6 +54,7 @@ def get_products(params, tenant, lang):
 
     rv._embed('products', [_get_product_resource(p, lang, partial=True)
                            for p in products])
+    rv._k('products', [p.product_id for p in products])
     return rv.document, 200, []
 
 def _product_summary(p, lang):
@@ -189,7 +191,7 @@ def get_product_summary(product_id, lang):
 #    return rv, 200, []
 
 @route('/products/<product_id>', authenticate=True, expects_tenant=True,
-       expects_params=True, expects_lang=True)
+       expects_params=True, expects_lang=True, readonly=True)
 def get_product(product_id, tenant, params, lang):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
@@ -202,8 +204,11 @@ def _get_product_resource(p, lang, partial=True):
     rv._l('self', url_for('api.get_product', product_id=p.product_id,
                           partial=partial))
     rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
+    rv._l('filters', url_for('api.put_product_filters', product_id=p.product_id))
     rv._k('product_id', p.product_id.hex)
     rv._k('visible', p.visible)
+
+    rv._k('filters', _get_product_filters(p))
 
     rv._k('images', [img_aspect_ratios(
         i.image, aspect_ratios=['1:1'], sizes=['thumb', 'medium'])
@@ -232,6 +237,14 @@ def _get_product_resource(p, lang, partial=True):
 
     rv._k('data', {'fields': fields})
     return rv.document
+
+def _get_product_filters(p):
+    rv = {}
+    for fo in p.filter_options:
+        rv.setdefault(clean_uuid(fo.filter_id), []).append(clean_uuid(
+            fo.filter_option_id))
+    return rv
+
 
 def _fields(fields, lang):
     if not fields:
@@ -339,6 +352,7 @@ def db_flush():
         db.session.flush()
     except sql_exc.IntegrityError as e:
         db.session.rollback()
+        app.logger.info('problem saving in the database')
         json_abort(400, {'error': 'Problem while saving data'})
 
 @route('/products', methods=['POST'], expects_data=True, expects_lang=True)
@@ -367,6 +381,7 @@ def put_product(product_id, data, tenant, lang):
     p = _get_product(product_id, tenant.tenant_id)
     populate_product(p, data, lang)
 
+
     #filters = data.pop('filters', [])
     #data.pop('data', None)
     #p.populate(**data)
@@ -386,6 +401,78 @@ def put_product(product_id, data, tenant, lang):
 
     db_flush()
     return {}, 200, []
+
+@route('/products/<product_id>/filters',
+       methods=['PUT'], expects_tenant=True, expects_data=True,
+       authenticate=True)
+def put_product_filters(product_id, data, tenant):
+    #TODO: validation
+    filters = data.get('filters') or  []
+    try:
+        update_filter_options(product_id, filters, tenant.tenant_id)
+    except:
+        db.session.rollback()
+        raise
+        json_abort(400, {'error':'Bad format'})
+    return {}, 200, []
+
+@route('/products/details', expects_params=True, expects_tenant=True,
+       authenticate=True, expects_lang=True)
+def get_product_details(tenant, lang, params):
+    #TODO: validate params
+    product_ids = params.get('pid')
+    rv = hal()
+    rv._l('self', url_for('api.get_product_details'))
+    products = Product.query.filter(
+        Product.product_id.in_(product_ids),
+        Product.tenant_id==tenant.tenant_id,
+    ).all()
+    rv._embed('products', [_get_product_resource(p, lang, partial=True)
+                           for p in products])
+    return rv.document, 200, []
+
+def update_filter_options(product_id, filters, tenant_id):
+    try:
+        db.session.execute(
+            'DELETE FROM products_filter_options WHERE tenant_id=:tenant_id ' 
+            'AND product_id=:product_id',
+            {
+                'tenant_id':tenant_id, 
+                'product_id':product_id,
+            })
+    except: 
+        db.session.rollback()
+        raise
+        json_abort(400, {'error': 'Bad format'})
+
+    if not filters:
+        return
+
+    options = []
+    for filter_id,filter_options in filters.items():
+        options.extend(FilterOption.query.filter(
+            FilterOption.filter_id==filter_id,
+            FilterOption.filter_option_id.in_(filter_options),
+            FilterOption.tenant_id==tenant_id,
+        ).all())
+
+    new = [{
+        'tenant_id': tenant_id, 
+        'product_id': product_id,
+        'filter_option_id': o.filter_option_id, 
+    } for o in options]
+
+    if new:
+        db.session.execute(
+            'insert into products_filter_options '
+            '(tenant_id, filter_option_id, product_id) values '
+            '(:tenant_id, :filter_option_id, :product_id)', new)
+
+    try:
+        db.session.flush()
+    except:
+        raise
+        db.session.rollback()
 
 """
 For a data to be patched to the product, it must already be present. 

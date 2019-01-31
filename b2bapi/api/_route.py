@@ -278,6 +278,16 @@ def tenant_injector(fnc):
         return fnc(*a, **kw)
     return wrapper
 
+def dbsession_rollback(fnc):
+    """
+    rolls back all changes during the session
+    """
+    def wrapper(*a, **kw):
+        rv = fnc(*a,**kw)
+        db.session.rollback()
+        return rv
+    return wrapper
+
 def auth_injector(fnc):
     access_token_schemes = ['access_token', 'access-token', 'accesstoken']
     @functools.wraps(fnc)
@@ -354,7 +364,7 @@ def route(
     authorize=None, expects_lang=False, expects_account=False,
     expects_role=False, expects_tenant=False, expects_auth=False,
     passthrough=None, cacheable=False, if_match=False, if_none_match=False,
-    endpoint=None, **kw):
+    endpoint=None, readonly=False, **kw):
     """ function to map  route to function """
 
     if methods is None: methods = ['GET',]
@@ -377,6 +387,7 @@ def route(
             expects_tenant=expects_tenant, 
             expects_params=expects_params,
             expects_lang=expects_lang,
+            readonly=readonly,
         )
 
 
@@ -388,6 +399,9 @@ def route(
 
         #if passthrough:
         #    fnc = passthrough_view(fnc, passthrough)
+
+        if readonly:
+            fnc = dbsession_rollback(fnc)
 
         if expects_files:
             if 'basestring' not in globals():
