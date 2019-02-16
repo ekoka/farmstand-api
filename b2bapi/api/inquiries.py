@@ -12,10 +12,10 @@ from b2bapi.utils.uuid import clean_uuid
 from ._route import route, json_abort, hal
 
 
-@route('/inquiries', expects_tenant=True, authenticate=True)
-def get_inquiries(tenant):
-    tenant_id = tenant.tenant_id
-    q = Inquiry.query.filter_by(tenant_id=tenant_id)
+@route('/inquiries', expects_domain=True, authenticate=True)
+def get_inquiries(domain):
+    domain_id = domain.domain_id
+    q = Inquiry.query.filter_by(domain_id=domain_id)
     #if params.get('filters'): 
     #    filters = json.loads(params['filters'])
     #    q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
@@ -48,23 +48,23 @@ def _get_inquiry_resource(i, partial=True):
         rv._k('partial', partial)
     return rv.document
 
-def _get_inquiry(inquiry_id, tenant_id):
+def _get_inquiry(inquiry_id, domain_id):
     inquiry_id = clean_uuid(inquiry_id)
     try:
         if inquiry_id is None:
             raise orm_exc.NoResultFound()
         return Inquiry.query.filter_by(inquiry_id=inquiry_id, 
-                                       tenant_id=tenant_id).one()
+                                       domain_id=domain_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Inquiry Not Found'})
 
-@route('/inquiries/<inquiry_id>', authenticate=True, expects_tenant=True,
+@route('/inquiries/<inquiry_id>', authenticate=True, expects_domain=True,
        expects_params=True)
-def get_inquiry(inquiry_id, tenant, params):
+def get_inquiry(inquiry_id, domain, params):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
     app.logger.info(partial)
-    inquiry = _get_inquiry(inquiry_id, tenant.tenant_id)
+    inquiry = _get_inquiry(inquiry_id, domain.domain_id)
     document = _get_inquiry_resource(inquiry, partial=partial)
     return document, 200, []
 
@@ -78,11 +78,11 @@ def db_flush():
 
 
 @route('/inquiries/<inquiry_id>', methods=['PUT'], expects_data=True,
-       authenticate=True, expects_tenant=True)
-def put_inquiry(inquiry_id, data, tenant):
+       authenticate=True, expects_domain=True)
+def put_inquiry(inquiry_id, data, domain):
     # TODO: validation
     # data = edit_inquiry.validate(data)
-    i = _get_inquiry(inquiry_id, tenant.tenant_id)
+    i = _get_inquiry(inquiry_id, domain.domain_id)
 
     filters = data.pop('filters', [])
     fields = data.pop('fields', [])
@@ -106,14 +106,14 @@ def put_inquiry(inquiry_id, data, tenant):
     return {}, 200, []
 
 @route('/inquiries/<inquiry_id>', methods=['DELETE'], authenticate=True,
-       expects_tenant=True)
-def delete_inquiry(inquiry_id, tenant):
+       expects_domain=True)
+def delete_inquiry(inquiry_id, domain):
     try:
-        i = _get_inquiry(inquiry_id, tenant.tenant_id)
+        i = _get_inquiry(inquiry_id, domain.domain_id)
         db.session.delete(i)
         db.session.flush()
         #.inquiries.delete().where(
-        #    (inquiries.c.tenant_id==g.tenant['tenant_id'])&
+        #    (inquiries.c.domain_id==g.domain['domain_id'])&
         #    (inquiries.c.inquiry_id==inquiry_id)))
     except:
         pass

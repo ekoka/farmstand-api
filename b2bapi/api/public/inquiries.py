@@ -13,8 +13,8 @@ from .._route import route, json_abort, hal
 
 
 @route('/public/inquiries', methods=['POST'], expects_data=True, 
-       expects_tenant=True)
-def post_public_inquiry(data, tenant):
+       expects_domain=True)
+def post_public_inquiry(data, domain):
     # TODO: validation
     if not data.get('billing_address'):
         json_abort(400, {'error': 'Missing billing address'})
@@ -34,7 +34,7 @@ def post_public_inquiry(data, tenant):
 
     inq = Inquiry(
         data=data, 
-        tenant_id=tenant.tenant_id, 
+        domain_id=domain.domain_id, 
         dates={'created': datetime.datetime.utcnow().isoformat()},
         status='created',
     )

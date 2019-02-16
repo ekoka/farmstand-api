@@ -26,7 +26,7 @@ def _get_product_type(product_type_id):
         if product_type_id is None:
             raise orm_exc.NoResultFound()
         return ProductType.query.filter_by(
-            tenant_id=g.tenant['tenant_id'],
+            domain_id=g.domain['domain_id'],
             product_type_id=product_type_id).one()
     except orm_exc.NoResultFound:
         abort(404)
@@ -100,7 +100,7 @@ def put_product_type(product_type_id, data):
 def delete_product_type(product_type_id):
     product_types = ProductType.__table__
     db.session.execute(product_types.delete().where(
-        (product_types.c.tenant_id==g.tenant['tenant_id'])&
+        (product_types.c.domain_id==g.domain['domain_id'])&
         (product_types.c.product_type_id==product_type_id)))
     return ({}, 200, [])
 

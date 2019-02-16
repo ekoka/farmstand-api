@@ -32,19 +32,19 @@ db.JSON = JSON
 db.JSONB = JSONB
 #db.ARRAY = pg.ARRAY
 
-class TenantMixin(object):
+class DomainMixin(object):
 
     @declared_attr
-    def tenant_id(self):
+    def domain_id(self):
         return db.Column(None, db.ForeignKey(
-            'tenants.tenant_id', ondelete='cascade'), primary_key=True)
+            'domains.domain_id', ondelete='cascade'), primary_key=True)
 
 
-db.TenantMixin = TenantMixin
+db.DomainMixin = DomainMixin
 
 from . import (
     signins,
-    tenants,
+    domains,
     products,
     filters,
     images,

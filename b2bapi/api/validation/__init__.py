@@ -21,8 +21,8 @@ def has_any(*values):
 valid_values = has_any
 
 
-def set_tenant(*a, **k):
-    return g.tenant['tenant_id']
+def set_domain(*a, **k):
+    return g.domain['domain_id']
 
 class set_default:
     def __init__(self, fnc, replaceables=(None,)):

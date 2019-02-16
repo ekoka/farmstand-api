@@ -19,8 +19,8 @@ from ._route import route, url_for, json_abort, hal
 from .validation import images as validators
 
 @route('/source-images', methods=['POST'], expects_files=['image'],
-       expects_tenant=True, authenticate=True)
-def post_source_image(tenant, image=None):
+       expects_domain=True, authenticate=True)
+def post_source_image(domain, image=None):
     #record = _get_source_image(image_id)
     # TODO: move this initialization inside POSTing of SourceImage
     source_file = image[0]
@@ -37,7 +37,7 @@ def post_source_image(tenant, image=None):
             source_image.save()
             srcimg_record = SourceImage(
                 source_image_id=image_id,
-                tenant_id=tenant['tenant_id'],
+                domain_id=domain['domain_id'],
                 meta=get_image_data(source_image),
             )
 
@@ -46,7 +46,7 @@ def post_source_image(tenant, image=None):
                                             context='web')
             main_copy.save()
             main_base = BaseImage(
-                tenant_id = tenant['tenant_id'],
+                domain_id = domain['domain_id'],
                 base_image_id = main_copy.blob_signature,
                 meta = get_image_data(main_copy),
                 source=srcimg_record,
@@ -69,12 +69,12 @@ def post_source_image(tenant, image=None):
     
     return rv.document, 200, ()
 
-@route('images', expects_tenant=True, expects_params=True, authenticate=True)
-def get_images(tenant, params):
+@route('images', expects_domain=True, expects_params=True, authenticate=True)
+def get_images(domain, params):
     params = validators.aspect_ratios.validate(params)
     rv = hal()
     rv._l('self',url_for('api.get_images', **params))
-    imgquery = BaseImage.query.filter_by(tenant_id=tenant['tenant_id'])
+    imgquery = BaseImage.query.filter_by(domain_id=domain['domain_id'])
     images = []
     for i in imgquery.all():
         img_resource = hal()
@@ -148,21 +148,21 @@ def _image_resource(image, **params):
     rv._k('aspect_ratios', aspect_ratios)
     return rv
 
-@route('/images/<image_id>', expects_tenant=True)
-def get_image(image_id, tenant):
+@route('/images/<image_id>', expects_domain=True)
+def get_image(image_id, domain):
     try:
-        image = BaseImage.query.get((image_id, tenant['tenant_id']))
+        image = BaseImage.query.get((image_id, domain['domain_id']))
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error':'Image not Found'})
 
     rv = _image_resource(image)
     return rv.document, 200, []
 
-@route('/products/<product_id>/images', expects_tenant=True, 
+@route('/products/<product_id>/images', expects_domain=True, 
        authenticate=True, expects_params=True)
-def get_product_images(product_id, tenant, params):
+def get_product_images(product_id, domain, params):
     product_imgs = ProductImage.query.filter_by(
-        product_id=product_id, tenant_id=tenant['tenant_id']).all()
+        product_id=product_id, domain_id=domain['domain_id']).all()
     product_imgs.sort(key=lambda pi: pi.data.get('position'))
     rv = hal()
     rv._l('self', url_for('api.get_product_images', product_id=product_id))
@@ -171,18 +171,18 @@ def get_product_images(product_id, tenant, params):
     rv._embed('images', images)
     return rv.document, 200, []
 
-@route('/products/<product_id>/images', methods=['PUT'], expects_tenant=True,
+@route('/products/<product_id>/images', methods=['PUT'], expects_domain=True,
        expects_data=True, authenticate=True)
-def put_product_images(product_id, tenant, data):
+def put_product_images(product_id, domain, data):
     db.session.execute(db.text(
         'delete from product_images '
-        'where product_id=:product_id and tenant_id=:tenant_id'
-    ), {'product_id': product_id, 'tenant_id': tenant['tenant_id']})
+        'where product_id=:product_id and domain_id=:domain_id'
+    ), {'product_id': product_id, 'domain_id': domain['domain_id']})
 
     #TODO: validation
     for position, image_id in enumerate(data):
         db.session.add(ProductImage(
-            tenant_id=tenant.tenant_id,
+            domain_id=domain.domain_id,
             product_id=product_id,
             base_image_id=image_id,
             data={'position':position}))
@@ -214,18 +214,18 @@ def post_source_image_meta(data):
     return rv, 201, [('Location', redirect_url)]
 
 
-def _get_source_image(image_id, tenant_id):
+def _get_source_image(image_id, domain_id):
     try:
         if image_id is None:
             raise orm_exc.NoResultFound()
         return SourceImage.query.filter_by(
-            source_image_id=image_id, tenant_id=tenant_id).one()
+            source_image_id=image_id, domain_id=domain_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error':'Image not found'})
 
-@route('/source-images/<image_id>', expects_tenant=True)
-def get_source_image(image_id, tenant):
-    record = _get_source_image(image_id, tenant['tenant_id'])
+@route('/source-images/<image_id>', expects_domain=True)
+def get_source_image(image_id, domain):
+    record = _get_source_image(image_id, domain['domain_id'])
     return rv, 200, ()
 
 def get_image_data(image):

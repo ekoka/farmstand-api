@@ -25,8 +25,8 @@ from .validation.products import (add_product, edit_product, edit_product_member
 #def get_products(params, lang):
 #    max_id = None
 #    min_id = None
-#    tenant_id = g.tenant['tenant_id']
-#    q = Product.query.filter_by(tenant_id=tenant_id)
+#    domain_id = g.domain['domain_id']
+#    q = Product.query.filter_by(domain_id=domain_id)
 #    if params.get('filters'): 
 #        filters = json.loads(params['filters'])
 #        q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
@@ -38,11 +38,11 @@ from .validation.products import (add_product, edit_product, edit_product_member
 #    }
 #    return rv, 200, []
 
-@route('/products', expects_params=True, expects_tenant=True,
+@route('/products', expects_params=True, expects_domain=True,
        authenticate=True, expects_lang=True, readonly=True)
-def get_products(params, tenant, lang):
-    tenant_id = tenant.tenant_id
-    products = db.session.query(Product.product_id).filter_by(tenant_id=tenant_id)
+def get_products(params, domain, lang):
+    domain_id = domain.domain_id
+    products = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
     product_url = url_for('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', url_for('api.get_products', **params))
@@ -99,9 +99,9 @@ def _caption(data, lang):
 # TODO: temporarily hardwired 
 #@route('/product-templates/<product_type_id>', methods=['GET'])
 #def get_product_template(product_type_id):
-#    tenant_id = g.tenant['tenant_id']
+#    domain_id = g.domain['domain_id']
 #    product_type = ProductType.query.filter_by(
-#        product_type_id=product_type_id, tenant_id=tenant_id).one()
+#        product_type_id=product_type_id, domain_id=domain_id).one()
 #    product = {
 #        'product_id': uuid.uuid4().hex,
 #    }
@@ -155,13 +155,13 @@ def get_product_schema(lang):
                      for f in product_schema['schema']['fields']])
     return rv.document, 200, []
 
-def _get_product(product_id, tenant_id):
+def _get_product(product_id, domain_id):
     product_id = clean_uuid(product_id)
     try:
         if product_id is None:
             raise orm_exc.NoResultFound()
         return Product.query.filter_by(product_id=product_id, 
-                                       tenant_id=tenant_id).one()
+                                       domain_id=domain_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
@@ -183,12 +183,12 @@ def get_product_summary(product_id, lang):
 #    }
 #    return rv, 200, []
 
-@route('/products/<product_id>', authenticate=True, expects_tenant=True,
+@route('/products/<product_id>', authenticate=True, expects_domain=True,
        expects_params=True, expects_lang=True, readonly=True)
-def get_product(product_id, tenant, params, lang):
+def get_product(product_id, domain, params, lang):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
-    product = _get_product(product_id, tenant.tenant_id)
+    product = _get_product(product_id, domain.domain_id)
     document = _get_product_resource(product, lang, partial=partial)
     return document, 200, []
 
@@ -243,7 +243,7 @@ def _fields(fields, lang):
     if not fields:
         return []
     names = [f['name'] for f in fields if f.get('name')]
-    field_metas = load_field_metas(names, g.tenant['tenant_id'])
+    field_metas = load_field_metas(names, g.domain['domain_id'])
     return [_field(f, field_metas.get(f.get('name')), lang) for f in fields]
 
 def _field(f, meta, lang):
@@ -267,10 +267,10 @@ def _field(f, meta, lang):
     return rv
 
 
-def load_field_metas(schema_names, tenant_id):
+def load_field_metas(schema_names, domain_id):
     # query the db for fields with those names and produce
     # a dict indexed by those names
-    fields = Field.query.filter(Field.tenant_id==tenant_id, 
+    fields = Field.query.filter(Field.domain_id==domain_id, 
                                 Field.name.in_(schema_names)).all()
     return {f.name:f for f in fields}
 
@@ -368,10 +368,10 @@ def post_product(data, lang):
 
 
 @route('/products/<product_id>', methods=['PUT'], expects_data=True,
-       authenticate=True, expects_tenant=True, expects_lang=True)
-def put_product(product_id, data, tenant, lang):
+       authenticate=True, expects_domain=True, expects_lang=True)
+def put_product(product_id, data, domain, lang):
     data = edit_product.validate(data)
-    p = _get_product(product_id, tenant.tenant_id)
+    p = _get_product(product_id, domain.domain_id)
     populate_product(p, data, lang)
 
 
@@ -396,41 +396,41 @@ def put_product(product_id, data, tenant, lang):
     return {}, 200, []
 
 @route('/products/<product_id>/filters',
-       methods=['PUT'], expects_tenant=True, expects_data=True,
+       methods=['PUT'], expects_domain=True, expects_data=True,
        authenticate=True)
-def put_product_filters(product_id, data, tenant):
+def put_product_filters(product_id, data, domain):
     #TODO: validation
     filters = data.get('filters') or  []
     try:
-        update_filter_options(product_id, filters, tenant.tenant_id)
+        update_filter_options(product_id, filters, domain.domain_id)
     except:
         db.session.rollback()
         raise
         json_abort(400, {'error':'Bad format'})
     return {}, 200, []
 
-@route('/products/details', expects_params=True, expects_tenant=True,
+@route('/products/details', expects_params=True, expects_domain=True,
        authenticate=True, expects_lang=True)
-def get_product_details(tenant, lang, params):
+def get_product_details(domain, lang, params):
     #TODO: validate params
     product_ids = params.getlist('pid')
     rv = hal()
     rv._l('self', url_for('api.get_product_details'))
     products = Product.query.filter(
         Product.product_id.in_(product_ids),
-        Product.tenant_id==tenant.tenant_id,
+        Product.domain_id==domain.domain_id,
     ).all()
     rv._embed('products', [_get_product_resource(p, lang, partial=True)
                            for p in products])
     return rv.document, 200, []
 
-def update_filter_options(product_id, filters, tenant_id):
+def update_filter_options(product_id, filters, domain_id):
     try:
         db.session.execute(
-            'DELETE FROM products_filter_options WHERE tenant_id=:tenant_id ' 
+            'DELETE FROM products_filter_options WHERE domain_id=:domain_id ' 
             'AND product_id=:product_id',
             {
-                'tenant_id':tenant_id, 
+                'domain_id':domain_id, 
                 'product_id':product_id,
             })
     except: 
@@ -446,11 +446,11 @@ def update_filter_options(product_id, filters, tenant_id):
         options.extend(FilterOption.query.filter(
             FilterOption.filter_id==filter_id,
             FilterOption.filter_option_id.in_(filter_options),
-            FilterOption.tenant_id==tenant_id,
+            FilterOption.domain_id==domain_id,
         ).all())
 
     new = [{
-        'tenant_id': tenant_id, 
+        'domain_id': domain_id, 
         'product_id': product_id,
         'filter_option_id': o.filter_option_id, 
     } for o in options]
@@ -458,8 +458,8 @@ def update_filter_options(product_id, filters, tenant_id):
     if new:
         db.session.execute(
             'insert into products_filter_options '
-            '(tenant_id, filter_option_id, product_id) values '
-            '(:tenant_id, :filter_option_id, :product_id)', new)
+            '(domain_id, filter_option_id, product_id) values '
+            '(:domain_id, :filter_option_id, :product_id)', new)
 
     try:
         db.session.flush()
@@ -471,10 +471,10 @@ def update_filter_options(product_id, filters, tenant_id):
 For a data to be patched to the product, it must already be present. 
 """
 @route('/products/<product_id>', methods=['PATCH'], expects_data=True,
-       expects_tenant=True, expects_lang=True, authenticate=True)
-def patch_product(product_id, data, tenant, lang):
+       expects_domain=True, expects_lang=True, authenticate=True)
+def patch_product(product_id, data, domain, lang):
     #data = edit_product_members.validate(data)
-    p = _get_product(product_id, tenant.tenant_id)
+    p = _get_product(product_id, domain.domain_id)
     try:
         _localize_fields(data, lang)
     except (ValueError, AttributeError, TypeError):
@@ -497,7 +497,7 @@ def delete_product(product_id):
         db.session.delete(p)
         db.session.flush()
         #.products.delete().where(
-        #    (products.c.tenant_id==g.tenant['tenant_id'])&
+        #    (products.c.domain_id==g.domain['domain_id'])&
         #    (products.c.product_id==product_id)))
     except:
         pass

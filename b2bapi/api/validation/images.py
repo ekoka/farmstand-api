@@ -3,13 +3,13 @@ from vino.processors import validating as vld
 from vino.processors.validating import (
     required, rejectnull, allowempty, rejectempty)
 
-from . import (set_tenant, check_bool, check_uuid4,  set_uuid, 
+from . import (set_domain, check_bool, check_uuid4,  set_uuid, 
                upper, remove, set_default, set_value, has_any)
 
 # TODO: add an extrafield blocker
 # TODO: process blob here
 add_source_image = obj(
-    prim(required(override=set_tenant)).apply_to('tenant_id'),
+    prim(required(override=set_domain)).apply_to('domain_id'),
     # TODO: this is where blob's signature should be assigned to source_image_id
     #prim(required(override=set_uuid)).apply_to('source_image_id'),
     # TODO: this is where metas should be set 

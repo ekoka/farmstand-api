@@ -18,7 +18,7 @@ def _get_field(field_id):
         if field_id is None:
             abort(404)
         return Field.query.filter_by(
-            tenant_id=g.tenant['tenant_id'],field_id=field_id).one()
+            domain_id=g.domain['domain_id'],field_id=field_id).one()
     except:
         raise
         # TODO: better message
@@ -55,7 +55,7 @@ def put_field(field_id, data):
     # this is mostly to be safe, only the schema field is updated 
     # on the record
     #def pop_members(data, state):
-    #    for m in ['field_id', 'field_type', 'name', 'tenant_id']:
+    #    for m in ['field_id', 'field_type', 'name', 'domain_id']:
     #        data.pop(m, None)
     #    return data
 
@@ -80,7 +80,7 @@ def delete_field(field_id):
     field_id = clean_uuid(field_id)
     if field_id is not None:
         db.session.execute(fields.delete().where(
-            (fields.c.tenant_id==g.tenant['tenant_id'])&
+            (fields.c.domain_id==g.domain['domain_id'])&
             (fields.c.field_id==field_id)))
     return ({}, 200, [])
 
@@ -97,7 +97,7 @@ def field_resource(record):
 @route('/fields/<field_id>', methods=['GET'])
 def get_field(field_id):
     try:
-        record = Field.query.filter_by(tenant_id=g.tenant['tenant_id'], 
+        record = Field.query.filter_by(domain_id=g.domain['domain_id'], 
                                 field_id=field_id).one()
     except orm_exc.NoResultFound as e:
         abort(404)
@@ -109,10 +109,10 @@ def get_fields():
         'self': url_for('api.get_fields'),
         'fields': [
             field_resource(rec) for rec in Field.query.filter_by(
-             tenant_id=g.tenant['tenant_id']).all()],
+             domain_id=g.domain['domain_id']).all()],
             #{'url': url_for('api.get_field', field_id=str(rec.field_id)),
             # 'name': rec.name} for rec in Field.query.filter_by(
-            # tenant_id=g.tenant['tenant_id']).all()],
+            # domain_id=g.domain['domain_id']).all()],
     }
     return rv, 200, []
 # \Fields 

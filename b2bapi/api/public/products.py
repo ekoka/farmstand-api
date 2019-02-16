@@ -25,20 +25,20 @@ def _get_filter_resource(f, partial=False):
         rv._k('level', f.level)
     return rv.document
 
-@route('/public/filters/<filter_id>', expects_tenant=True)
-def get_public_filter(filter_id, tenant):
+@route('/public/filters/<filter_id>', expects_domain=True)
+def get_public_filter(filter_id, domain):
     try:
         f = Filter.query.filter_by(
-            filter_id=filter_id, tenant_id=tenant.tenant_id).one()
+            filter_id=filter_id, domain_id=domain.domain_id).one()
     except:
         json_abort(404, {'error': 'Filter not found'})
 
     return _get_filter_resource(f), 200, []
 
-@route('/public/filter-sets', expects_tenant=True)
-def get_public_filter_sets(tenant):
-    tenant_id = tenant.tenant_id
-    fsets = FSet.query.filter_by(tenant_id=tenant_id).all()
+@route('/public/filter-sets', expects_domain=True)
+def get_public_filter_sets(domain):
+    domain_id = domain.domain_id
+    fsets = FSet.query.filter_by(domain_id=domain_id).all()
 
     rv = hal() 
     rv._l('self', url_for('api.get_public_filter_sets'))
@@ -48,8 +48,8 @@ def get_public_filter_sets(tenant):
 
     return rv.document, 200, []
 
-@route('/public/filter-sets/<filter_set_id>', expects_tenant=True)
-def get_public_filter_set(filter_set_id, tenant):
+@route('/public/filter-sets/<filter_set_id>', expects_domain=True)
+def get_public_filter_set(filter_set_id, domain):
     pass
 
 def _get_filter_set_resource(fs):
@@ -66,10 +66,10 @@ def _get_filter_set_resource(fs):
            for f in fs.filters ])
     return rv.document
 
-@route('/public/products', expects_params=True, expects_tenant=True)
-def get_public_products(params, tenant):
-    tenant_id = tenant.tenant_id
-    baseq = Product.query.filter(Product.tenant_id==tenant_id)
+@route('/public/products', expects_params=True, expects_domain=True)
+def get_public_products(params, domain):
+    domain_id = domain.domain_id
+    baseq = Product.query.filter(Product.domain_id==domain_id)
     
     if params.get('filters'):
         filters = params.getlist('filters')
@@ -130,23 +130,23 @@ def _get_product_resource(p, partial=True):
         rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
     return rv.document
 
-def _get_product(product_id, tenant_id):
+def _get_product(product_id, domain_id):
     product_id = clean_uuid(product_id)
     try:
         if product_id is None:
             raise orm_exc.NoResultFound()
         return Product.query.filter_by(product_id=product_id, 
-                                       tenant_id=tenant_id).one()
+                                       domain_id=domain_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
-@route('/public/products/<product_id>', authenticate=True, expects_tenant=True,
+@route('/public/products/<product_id>', authenticate=True, expects_domain=True,
        expects_params=True)
-def get_public_product(product_id, tenant, params):
+def get_public_product(product_id, domain, params):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
     app.logger.info(partial)
-    product = _get_product(product_id, tenant.tenant_id)
+    product = _get_product(product_id, domain.domain_id)
     document = _get_product_resource(product, partial=partial)
     return document, 200, []
 
@@ -168,11 +168,11 @@ def get_public_product(product_id, tenant, params):
 
 # ------------------------ Product Schema ------------------------ # 
 
-def _set_default_product_schema(tenant_id):
-    ps = PSchema.query.get(tenant_id)
+def _set_default_product_schema(domain_id):
+    ps = PSchema.query.get(domain_id)
     if not ps:
         try:
-            ps = PSchema(product_schema_id=tenant_id)
+            ps = PSchema(product_schema_id=domain_id)
             db.session.add(ps)
             db.session.flush()
         except Exception as e:
@@ -180,9 +180,9 @@ def _set_default_product_schema(tenant_id):
             json_abort(401, {})
     return ps
 
-@route('/public/product-schema', expects_tenant=True)
-def get_public_product_schema(tenant):
-    ps = _set_default_product_schema(tenant.tenant_id)
+@route('/public/product-schema', expects_domain=True)
+def get_public_product_schema(domain):
+    ps = _set_default_product_schema(domain.domain_id)
     rv = hal()
     rv._l('self', url_for('api.get_public_product_schema'))
     for k,v in ps.data.items():

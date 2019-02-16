@@ -13,7 +13,7 @@ FieldType = db.pg.ENUM(
     name='field_types'
 )
 
-class Field(db.Model, db.TenantMixin): #, FieldInitializerMixin,):
+class Field(db.Model, db.DomainMixin): #, FieldInitializerMixin,):
     __abstract__ = False
     __tablename__ = 'fields'
 
@@ -37,7 +37,7 @@ class Field(db.Model, db.TenantMixin): #, FieldInitializerMixin,):
     }
     """
 
-    tenant = db.relationship('Tenant')
+    domain = db.relationship('Domain')
 
     text_types = ['SHORT_TEXT', 'MEDIUM_TEXT', 'LONG_TEXT', 'LIST']
     choice_types = ['SINGLE_CHOICE', 'MULTI_CHOICE']
@@ -71,7 +71,7 @@ class Field(db.Model, db.TenantMixin): #, FieldInitializerMixin,):
             ChoiceSchema(self.schema, lang).set_schema(data)
 
     __table_args__ = (
-        db.UniqueConstraint('tenant_id', 'name'),
+        db.UniqueConstraint('domain_id', 'name'),
     )
 
 
@@ -186,7 +186,7 @@ class TextSchema(FieldSchema):
             'default_value')
 
 
-class ProductType(db.TenantMixin, db.Model,):
+class ProductType(db.DomainMixin, db.Model,):
     __tablename__ = 'product_types'
 
     product_type_id = db.Column(db.UUID, primary_key=True)
@@ -202,7 +202,7 @@ class ProductType(db.TenantMixin, db.Model,):
     """
 
     __table_args__ = (
-        db.UniqueConstraint('tenant_id', 'name'),
+        db.UniqueConstraint('domain_id', 'name'),
     )
 
     def get_field_value_key(self, field):

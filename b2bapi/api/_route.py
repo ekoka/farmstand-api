@@ -19,30 +19,30 @@ proxy_auth_url = 'http://simpleauth.local:9898'
 def hal():
     return Hal()._c('simpleb2b', 'https://api.simpleb2b.io/doc/{rel}')
 
-# setting tenant name in urls that expects it during `url_for()`
+# setting domain name in urls that expects it during `url_for()`
 @bp.url_defaults
-def set_tenant(endpoint, values):
-    if 'tenant' in values or not getattr(g, 'tenant', None):
+def set_domain(endpoint, values):
+    if 'domain' in values or not getattr(g, 'domain', None):
         return
-    if app.url_map.is_endpoint_expecting(endpoint, 'tenant'):
-        values['tenant'] = g.tenant.name
+    if app.url_map.is_endpoint_expecting(endpoint, 'domain'):
+        values['domain'] = g.domain.name
 
 
-# removing tenant name from values matched in the route and storing it in g
+# removing domain name from values matched in the route and storing it in g
 @bp.url_value_preprocessor
-def tenant_extractor(endpoint, values):
-    if 'tenant' not in values:
+def domain_extractor(endpoint, values):
+    if 'domain' not in values:
         return
-    tenant_name = values.pop('tenant')
+    domain_name = values.pop('domain')
 
-    tenant = db.session.execute(
-        'select name, tenant_id from tenants where name = :name', 
-        {'name':tenant_name}).fetchone()
+    domain = db.session.execute(
+        'select name, domain_id from domains where name = :name', 
+        {'name':domain_name}).fetchone()
 
-    if tenant is None:
+    if domain is None:
         raise werk_exc.NotFound('API Not Found')
 
-    g.tenant = tenant
+    g.domain = domain
 
 def json_error(status_code, data=None):
     if data is None:
@@ -237,7 +237,7 @@ def authorization(fnc, roles):
         # if a resource must go through authorization a current_account should
         # be present in g.
         acc = g.current_account
-        authorized = acc.authorize(g.tenant, roles, kw) or authorized
+        authorized = acc.authorize(g.domain, roles, kw) or authorized
         if authorized:
             return fnc(*a, **kw)
         json_abort(403, {'error': 'Forbidden: you do not have access to this '
@@ -268,11 +268,11 @@ def role_injector(fnc):
         return fnc(*a, **kw)
     return wrapper
 
-def tenant_injector(fnc):
+def domain_injector(fnc):
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
         try:
-            kw['tenant'] = g.tenant
+            kw['domain'] = g.domain
         except AttributeError:
             json_abort(404, {'error': 'Not Found'})
         return fnc(*a, **kw)
@@ -359,10 +359,10 @@ def json_response_wrapper(fnc):
     return wrapper
 
 def route(
-    url_pattern, methods=None, tenanted=True, expects_data=False, 
+    url_pattern, methods=None, domained=True, expects_data=False, 
     expects_params=False, expects_files=False, authenticate=False, 
     authorize=None, expects_lang=False, expects_account=False,
-    expects_role=False, expects_tenant=False, expects_auth=False,
+    expects_role=False, expects_domain=False, expects_auth=False,
     passthrough=None, cacheable=False, if_match=False, if_none_match=False,
     endpoint=None, readonly=False, **kw):
     """ function to map  route to function """
@@ -373,7 +373,7 @@ def route(
         fnc = view_func
         _endpoint = endpoint or fnc.__name__
         _url_pattern = url_pattern
-        _tenanted = tenanted
+        _domained = domained
         _methods = methods
         _authenticate = authenticate
 
@@ -381,10 +381,10 @@ def route(
             fnc=fnc, 
             cacheable=cacheable,
             methods=_methods,
-            tenanted=_tenanted,
+            domained=_domained,
             expects_account=expects_account, 
             expects_role=expects_role, 
-            expects_tenant=expects_tenant, 
+            expects_domain=expects_domain, 
             expects_params=expects_params,
             expects_lang=expects_lang,
             readonly=readonly,
@@ -425,22 +425,22 @@ def route(
             _authenticate = True
             fnc = account_injector(fnc)
 
-        if expects_tenant:
-            # tenant are extracted from the route by default, in a preprocessor 
+        if expects_domain:
+            # domain are extracted from the route by default, in a preprocessor 
             # defined earlier in this module. Let's reinject them:
-            fnc = tenant_injector(fnc)
-            _tenanted = True
+            fnc = domain_injector(fnc)
+            _domained = True
 
-        if _tenanted:
-            # tenanted is True by default, meaning that routes that do not
-            # require a tenant should explicitly set this to False.
-            # it simply prefixes an url_pattern with the tenant placeholder.
+        if _domained:
+            # domained is True by default, meaning that routes that do not
+            # require a domain should explicitly set this to False.
+            # it simply prefixes an url_pattern with the domain placeholder.
 
-            # It is separate from a the previous option (expects_tenant)
-            # because even though most routes are tenanted, most endpoints do
+            # It is separate from a the previous option (expects_domain)
+            # because even though most routes are domained, most endpoints do
             # not expect that information by default.
             # Splitting these options allows to control these requirements.
-            _url_pattern = '/<tenant>/' + _url_pattern.lstrip('/')
+            _url_pattern = '/<domain>/' + _url_pattern.lstrip('/')
 
         if expects_role:
             # cannot have role without authentication

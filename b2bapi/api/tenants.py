@@ -8,6 +8,7 @@ from b2bapi.db.models.tenants import Tenant
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from ._route import route, url_for, json_abort, hal
+from b2bapi.db.models.reserved_names import reserved_names
 
 
 @route('/tenants', methods=['POST'], tenanted=False, expects_data=True, 
@@ -85,20 +86,21 @@ def _get_tenant_resource(tenant, partial=False):
 
     return rv.document
 
-@route('/tenant-name-search', expects_params=True, tenanted=False)
-def get_tenant_name_search(name):
-    try:
-        Tenant.query.filter(Tenant.name==name).one()
-        return {}, 200, []
-    except:
-        return {}, 404, []
-
-
-@route('/tenant/<tname>', tenanted=False)
+@route('/tenant/<tname>', tenanted=False, authenticate=True)
 def get_tenant(tname):
     try:
         tenant = Tenant.query.filter(Tenant.name==tname).one()
-    except:
-        raise
+    except orm_exc.NoResultFound as e:
         json_abort(404, {'error_code': 404, 'error': 'Tenant not found'})
     return _get_tenant_resource(tenant), 200, []
+
+@route('/tenant-name-check', tenanted=False, expects_params=True)
+def get_tenant_name_check(params):
+    name = params.get('q')
+    if name in reserved_names:
+        return {}, 403, []
+    try:
+        tenant = Tenant.query.filter(Tenant.name==name).one()
+        return {}, 200, []
+    except orm_exc.NoResultFound as e:
+        return {}, 404, []

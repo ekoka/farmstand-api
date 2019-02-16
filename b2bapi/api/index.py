@@ -13,7 +13,7 @@ def get_index():
     }
     return rv, 200, []
 
-@route('/root', tenanted=False)
+@route('/root', domained=False)
 def get_root():
     rv = hal()._l('self', url_for('api.get_root'))
     rv._l('simpleb2b:access_key', url_for('api.get_access_key'))
@@ -23,15 +23,15 @@ def get_root():
     rv._l('simpleb2b:account', url_for(
         'api.get_account', account_id='{account_id}'), templated=True, 
         unquote=True)
-    rv._l('simpleb2b:tenants', url_for('api.post_tenant'))
-    #._l('simpleb2b:tenant', '/api/v1/tenant/{tenant}', templated=True)
-    rv._l('simpleb2b:tenant', url_for('api.get_tenant', tname='{tenant}'),
+    rv._l('simpleb2b:domains', url_for('api.post_domain'))
+    #._l('simpleb2b:domain', '/api/v1/domain/{domain}', templated=True)
+    rv._l('simpleb2b:domain', url_for('api.get_domain', tname='{domain}'),
         templated=True, unquote=True)
-    rv._l('simpleb2b:tenant-name-search', url_for(
-        'api.get_tenant_name_search', name='{tenant}'), templated=True,
+    rv._l('simpleb2b:domain-name-check', url_for(
+        'api.get_domain_name_check', name='{domain}'), templated=True,
         unquote=True)
     rv._l('simpleb2b:public-root', url_for(
-        'api.get_public_root', tenant='{tenant}'), templated=True, 
+        'api.get_public_root', domain='{domain}'), templated=True, 
         unquote=True)
-        #'/api/v1/tenant-name-search?name={tenant}', templated=True)
+        #'/api/v1/domain-name-search?name={domain}', templated=True)
     return rv.document, 200, []

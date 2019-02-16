@@ -13,9 +13,9 @@ from b2bapi.db.models.filters import (
 from ._route import route, hal, json_abort
 from .product_utils import _localize_data, _merge_localized_data, _delocalize_data
 
-@route('/filters', expects_tenant=True, expects_lang=True, authenticate=True)
-def get_filters(lang, tenant):
-    filters = Filter.query.filter_by(tenant_id=tenant.tenant_id).all()
+@route('/filters', expects_domain=True, expects_lang=True, authenticate=True)
+def get_filters(lang, domain):
+    filters = Filter.query.filter_by(domain_id=domain.domain_id).all()
     rv = hal()
     rv._l('self', url_for('api.get_filters'))
     rv._l('filter', url_for('api.get_filter', filter_id='{filter_id}'),
@@ -26,13 +26,13 @@ def get_filters(lang, tenant):
     return rv.document, 200, []
 
 # TODO: review
-@route('/filters', methods=['POST'], expects_tenant=True, expects_data=True,
+@route('/filters', methods=['POST'], expects_domain=True, expects_data=True,
        expects_lang=True, authenticate=True)
-def post_filter(data, lang, tenant):
+def post_filter(data, lang, domain):
     #TODO: validate
     # data = val.new_filter.validate(data)
 
-    f = Filter( tenant_id=tenant.tenant_id)
+    f = Filter( domain_id=domain.domain_id)
     f.data = _localize_data(data['data'], ['label', 'description'], lang)
     f.active = data['active']
     f.multichoice = data['multichoice']
@@ -46,14 +46,14 @@ def post_filter(data, lang, tenant):
 
 
     if data.get('options'):
-        _sync_options(f, data['options'], lang, tenant.tenant_id)
+        _sync_options(f, data['options'], lang, domain.domain_id)
     rv = hal()
     location = url_for('api.get_filter', filter_id=f.filter_id)
     rv._l('location', location)
     rv._k('filter_id', f.filter_id)
     return rv.document, 201, [('Location', location)]
 
-def _sync_options(f, options, lang, tenant_id):
+def _sync_options(f, options, lang, domain_id):
     # first, find all options that did not make it
     try:
         new_option_ids = set(
@@ -68,18 +68,18 @@ def _sync_options(f, options, lang, tenant_id):
     if deleted:
         clause = db.text(
             'delete from products_filter_options '
-            'where tenant_id=:tenant_id '
+            'where domain_id=:domain_id '
             'and filter_option_id in :optionlist'
         )
-        delete_product_options = clause.bindparams(tenant_id=tenant_id, optionlist=deleted)
+        delete_product_options = clause.bindparams(domain_id=domain_id, optionlist=deleted)
         db.session.execute(delete_product_options)
         # delete options
         clause = db.text(
             'delete from filter_options '
-            'where tenant_id=:tenant_id '
+            'where domain_id=:domain_id '
             'and filter_option_id in :optionlist'
         )
-        delete_options = clause.bindparams(tenant_id=tenant_id, optionlist=deleted)
+        delete_options = clause.bindparams(domain_id=domain_id, optionlist=deleted)
         db.session.execute(delete_options)
     # update the remaining existing options
     for position,o in enumerate(options):
@@ -103,7 +103,7 @@ def _sync_options(f, options, lang, tenant_id):
             try:
                 # new option
                 fp = FilterOption(
-                    tenant_id=tenant_id, 
+                    domain_id=domain_id, 
                     position=position,
                 )
                 # localize the data
@@ -116,15 +116,15 @@ def _sync_options(f, options, lang, tenant_id):
                 json_abort(400, {'error': 'Bad format'})
 
 @route('/filters/<filter_id>', methods=['PUT'], expects_data=True, 
-       expects_lang=True, expects_tenant=True, authenticate=True)
-def put_filter(filter_id, data, lang, tenant):
+       expects_lang=True, expects_domain=True, authenticate=True)
+def put_filter(filter_id, data, lang, domain):
     #TODO: validate
     # data = val.edit_filter.validate(data)
-    f = _get_filter(filter_id, tenant.tenant_id)
+    f = _get_filter(filter_id, domain.domain_id)
     _merge_localized_data(f.data, data.pop('data'), ['label', 'description'], lang)
     f.active = data.get('active', False)
     f.multichoice = data.get('multichoice', False)
-    _sync_options(f, data.get('options', []), lang, tenant.tenant_id)
+    _sync_options(f, data.get('options', []), lang, domain.domain_id)
     # TODO: process options in bulk
     try:
         db.session.flush()
@@ -133,11 +133,11 @@ def put_filter(filter_id, data, lang, tenant):
         json_abort(400, {'error': 'Bad format'})
     return {}, 200, []
 
-def _get_filter(filter_id, tenant_id):
+def _get_filter(filter_id, domain_id):
     try:
         return Filter.query.filter_by(
             filter_id=filter_id, 
-            tenant_id=tenant_id
+            domain_id=domain_id
         ).one()
     except: 
         json_abort(404, {'error': 'Filter not found'})
@@ -159,22 +159,22 @@ def _filter_resource(f, lang, partial=False):
         'filter_option_id': clean_uuid(o.filter_option_id)} for o in f.options])
     return rv.document
 
-@route('/filters/<filter_id>', expects_tenant=True, expects_lang=True,
+@route('/filters/<filter_id>', expects_domain=True, expects_lang=True,
        authenticate=True)
-def get_filter(filter_id, lang, tenant):
-    f = _get_filter(filter_id, tenant.tenant_id)
+def get_filter(filter_id, lang, domain):
+    f = _get_filter(filter_id, domain.domain_id)
     rv = _filter_resource(f, lang, partial=False)
     return rv, 200, []
 
-@route('/filters/<filter_id>', methods=['DELETE'], expects_tenant=True,
+@route('/filters/<filter_id>', methods=['DELETE'], expects_domain=True,
        authenticate=True)
-def delete_filter(filter_id, tenant):
+def delete_filter(filter_id, domain):
     try:
         db.session.execute(
-            'DELETE FROM filters WHERE tenant_id=:tenant_id ' 
+            'DELETE FROM filters WHERE domain_id=:domain_id ' 
             'AND filter_id=:filter_id ',
             {
-                'tenant_id':tenant.tenant_id, 
+                'domain_id':domain.domain_id, 
                 'filter_id':filter_id,
             })
     except: 
@@ -198,11 +198,11 @@ def _filter_option_resource(filter_option, lang):
     return rv.document
 
 @route('/filters/<filter_id>/options', methods=['POST'], expects_lang=True,
-       expects_tenant=True, expects_data=True, authenticate=True)
-def post_filter_option(filter_id, data, lang, tenant):
+       expects_domain=True, expects_data=True, authenticate=True)
+def post_filter_option(filter_id, data, lang, domain):
     # TODO: validation
     # data = val.new_filter_option(data)
-    f_o = FilterOption(tenant_id=tenant.tenant_id, filter_id=filter_id)
+    f_o = FilterOption(domain_id=domain.domain_id, filter_id=filter_id)
     f_o.data = _localize_data(data, ['label'], lang)
     db.session.add(f_o)
     try:
@@ -216,29 +216,29 @@ def post_filter_option(filter_id, data, lang, tenant):
     rv._l('location', location)
 
 
-def _get_filter_option(filter_id, filter_option_id, tenant_id):
+def _get_filter_option(filter_id, filter_option_id, domain_id):
     try:
         f_o = FilterOption.query.filter(
             FilterOption.filter_id==filter_id, 
             FilterOption.filter_option_id==filter_option_id,
-            FilterOption.tenant_id==tenant_id).one()
+            FilterOption.domain_id==domain_id).one()
         return f_o
     except:
         json_abort(404, {'error': 'Filter option not found'})
 
 @route('/filters/<filter_id>/options/<filter_option_id>', authenticate=True,
-       expects_tenant=True, expects_lang=True)
-def get_filter_option(filter_id, filter_option_id, lang, tenant):
-    f_o = _get_filter_option(filter_id, filter_option_id, tenant.tenant_id)
+       expects_domain=True, expects_lang=True)
+def get_filter_option(filter_id, filter_option_id, lang, domain):
+    f_o = _get_filter_option(filter_id, filter_option_id, domain.domain_id)
     rv = _filter_option_resource(f_o, lang)
     return rv, 200, []
 
 @route('/filters/<filter_id>/options/<filter_option_id>', authenticate=True,
-       expects_tenant=True, expects_lang=True, expects_data=True)
-def put_filter_option(filter_id, filter_option_id, data, lang, tenant):
+       expects_domain=True, expects_lang=True, expects_data=True)
+def put_filter_option(filter_id, filter_option_id, data, lang, domain):
     # TODO: validate
     # data = val.filter_option.validate(data)
-    f_o = _get_filter_option(filter_id, filter_option_id, tenant.tenant_id)
+    f_o = _get_filter_option(filter_id, filter_option_id, domain.domain_id)
     _merge_localized_data(f_o.data, data['data'], ['label'], lang)
     try:
         db.session.flush()
@@ -247,15 +247,15 @@ def put_filter_option(filter_id, filter_option_id, data, lang, tenant):
     return {}, 200, []
 
 @route('/filters/<filter_id>/options/<filter_option_id>', authenticate=True,
-       expects_tenant=True)
-def delete_filter_option(filter_id, filter_option_id, tenant):
+       expects_domain=True)
+def delete_filter_option(filter_id, filter_option_id, domain):
     try:
         db.session.execute(
-            'DELETE FROM filter_options WHERE tenant_id=:tenant_id ' 
+            'DELETE FROM filter_options WHERE domain_id=:domain_id ' 
             'AND filter_id=:filter_id '
             'AND filter_option_id=:filter_option_id',
             {
-                'tenant_id':tenant.tenant_id, 
+                'domain_id':domain.domain_id, 
                 'filter_id':filter_id,
                 'filter_option_id':filter_option_id
             })
@@ -264,16 +264,16 @@ def delete_filter_option(filter_id, filter_option_id, tenant):
     return {}, 200, []
 
 @route('/filters/<filter_id>/options/<filter_option_id>/products',
-       methods=['PUT'], expects_tenant=True, expects_data=True,
+       methods=['PUT'], expects_domain=True, expects_data=True,
        authenticate=True)
-def put_filter_option_products(filter_id, filter_option_id, tenant, data):
-    f_o = _get_filter_option(filter_id, filter_option_id, tenant.tenant_id)
+def put_filter_option_products(filter_id, filter_option_id, domain, data):
+    f_o = _get_filter_option(filter_id, filter_option_id, domain.domain_id)
     try:
         db.session.execute(
-            'DELETE FROM products_filter_options WHERE tenant_id=:tenant_id ' 
+            'DELETE FROM products_filter_options WHERE domain_id=:domain_id ' 
             'AND filter_option_id=:filter_option_id',
             {
-                'tenant_id':tenant.tenant_id, 
+                'domain_id':domain.domain_id, 
                 'filter_option_id':filter_option_id
             })
     except: 
@@ -282,15 +282,15 @@ def put_filter_option_products(filter_id, filter_option_id, tenant, data):
         #json_abort(400, {'error': 'Bad format'})
 
     new = [{
-        'tenant_id': tenant.tenant_id, 
+        'domain_id': domain.domain_id, 
         'filter_option_id': filter_option_id, 
         'product_id': product_id} for product_id in data.get('products', [])]
 
     if new:
         db.session.execute(
             'insert into products_filter_options '
-            '(tenant_id, filter_option_id, product_id) values '
-            '(:tenant_id, :filter_option_id, :product_id)', new)
+            '(domain_id, filter_option_id, product_id) values '
+            '(:domain_id, :filter_option_id, :product_id)', new)
 
     try:
         db.session.flush()
@@ -299,13 +299,13 @@ def put_filter_option_products(filter_id, filter_option_id, tenant, data):
     return {}, 200, []
 
 
-# def _create_filter_sets(tenant_id):
-#     categories = FilterSet(tenant_id=tenant_id)
+# def _create_filter_sets(domain_id):
+#     categories = FilterSet(domain_id=domain_id)
 #     categories.data = {
 #         'label': {'en': 'Categories', 'fr': 'Catégories'},
 #         'multichoice': True,
 #     }
-#     brands = FilterSet(tenant_id=tenant_id)
+#     brands = FilterSet(domain_id=domain_id)
 #     brands.data = {
 #         'label': {'en': 'Brands', 'fr': 'Marques'},
 #         'multichoice': False,
@@ -315,12 +315,12 @@ def put_filter_option_products(filter_id, filter_option_id, tenant, data):
 #     db.session.flush()
 #     return [categories, brands]
 # 
-# @route('/filter-sets', expects_tenant=True)
-# def get_filter_sets(tenant):
-#     tenant_id = tenant.tenant_id
-#     fsets = FilterSet.query.filter_by(tenant_id=tenant_id).all()
+# @route('/filter-sets', expects_domain=True)
+# def get_filter_sets(domain):
+#     domain_id = domain.domain_id
+#     fsets = FilterSet.query.filter_by(domain_id=domain_id).all()
 #     if not fsets:
-#         fsets = _create_filter_sets(tenant.tenant_id)
+#         fsets = _create_filter_sets(domain.domain_id)
 # 
 #     rv = hal() 
 #     rv._l('self', url_for('api.get_filter_sets'))
@@ -357,12 +357,12 @@ def put_filter_option_products(filter_id, filter_option_id, tenant, data):
 #     pass
 # 
 # @route('/filter-sets/<filter_set_id>', methods=['POST'], expects_data=True,
-#        expects_tenant=True)
-# def post_filter(filter_set_id, data, tenant):
+#        expects_domain=True)
+# def post_filter(filter_set_id, data, domain):
 #     try:
 #         fs = FilterSet.query.filter_by(
 #             filter_set_id=filter_set_id,
-#             tenant_id=tenant.tenant_id).one()
+#             domain_id=domain.domain_id).one()
 #     except:
 #         json_abort(404, {'error': 'Filter Set Not Found'})
 # 
@@ -403,11 +403,11 @@ def put_filter_option_products(filter_id, filter_option_id, tenant, data):
 #         rv._l('simpleb2b:products', url_for('api.get_products', filter=f.filter_id))
 #     return rv.document
 # 
-# @route('/filters/<filter_id>', expects_tenant=True)
-# def get_filter(filter_id, tenant):
+# @route('/filters/<filter_id>', expects_domain=True)
+# def get_filter(filter_id, domain):
 #     try:
 #         f = Filter.query.filter_by(
-#             filter_id=filter_id, tenant_id=tenant.tenant_id).one()
+#             filter_id=filter_id, domain_id=domain.domain_id).one()
 #     except:
 #         json_abort(404)
 #     rv = _get_filter_resource(f, partial=False)
@@ -431,12 +431,12 @@ def put_filter_option_products(filter_id, filter_option_id, tenant, data):
 # 
 # 
 # @route('/filters/<filter_id>', methods=['DELETE'], authenticate=True,
-#        expects_tenant=True)
-# def delete_filter(filter_id, tenant):
+#        expects_domain=True)
+# def delete_filter(filter_id, domain):
 #     db.session.execute(
-#         'DELETE FROM filters WHERE tenant_id=:tenant_id '
+#         'DELETE FROM filters WHERE domain_id=:domain_id '
 #         'AND filter_id=:filter_id',
-#         {'tenant_id':tenant.tenant_id, 'filter_id':filter_id})
+#         {'domain_id':domain.domain_id, 'filter_id':filter_id})
 #     return {}, 200, []
 # 
 # 
@@ -447,7 +447,7 @@ def put_filter_option_products(filter_id, filter_option_id, tenant, data):
 # #        db.session.delete(p)
 # #        db.session.flush()
 # #        #.products.delete().where(
-# #        #    (products.c.tenant_id==g.tenant['tenant_id'])&
+# #        #    (products.c.domain_id==g.domain['domain_id'])&
 # #        #    (products.c.product_id==product_id)))
 # #    except:
 # #        pass

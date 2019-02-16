@@ -2,7 +2,7 @@ from vino.api.schema import obj, arr, prim
 from vino.processors import validating as vld
 from vino.processors.validating import required, rejectnull, allowempty
 
-from . import (set_tenant, check_bool, check_uuid4,  set_uuid, 
+from . import (set_domain, check_bool, check_uuid4,  set_uuid, 
                upper, remove, set_value)
 
 # each field is an object
@@ -45,7 +45,7 @@ data_val = obj(
 
 # TODO: add an extrafield blocker
 add_product = obj(
-    prim(required(override=set_tenant)).apply_to('tenant_id'),
+    prim(required(override=set_domain)).apply_to('domain_id'),
     prim(required(default=set_uuid), rejectnull(failsafe=set_uuid), 
          check_uuid4).apply_to('product_id'),
     prim(required(default=set_value(False)), check_bool).apply_to('visible'),
@@ -58,7 +58,7 @@ add_product = obj(
 # TODO: add an extrafield blocker
 edit_product = obj(
     prim(~required, remove).apply_to(
-        'product_id', 'tenant_id', 'self'),
+        'product_id', 'domain_id', 'self'),
     prim(~required, check_bool).apply_to('visible'),
     # TODO make sure the product_family exists
     #prim(~required).apply_to('product_family_id'),

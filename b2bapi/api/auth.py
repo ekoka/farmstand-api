@@ -22,26 +22,46 @@ from ._route import route, hal, json_abort
 #    location = APIUrl('api_v1.get_client', client_name=client.name)
 #    return {'location': location}, 201, [('Location', location)]
 
-@route('/signins', methods=['POST'], expects_data=True, tenanted=False)
+@route('/passcode', methods=['POST'], expects_data=True, domained=False)
+def post_passcode(data):
+    try:
+        email = data.get('email')
+        acc = Account.query.filter_by(email=email).one() 
+    except orm_exc.NoResultFound:
+        json_abort(404, {'error':'Email is not associated with an account.'})
+
+    db.session.execute(
+        db.text('delete from signins where email=:email'),
+        params={'email':email},)
+    signin = Signin(email=email, meta={'auth_type': 'login'})
+    db.session.add(signin)
+    return {}, 200, []
+
+
+@route('/signins', methods=['POST'], expects_data=True, domained=False)
 def post_signin(data):
     # TODO: validation
     # data = val.new_signin.validate(data)
+    email = data.pop('email')
+    # verify if an account has been created with that email in the past
+    account = Account.query.filter_by(email=email).first() 
+    if not account:
+        json_abort(404, {'error': 'No account associated with this e-mail.'})
+
+    # if account has been created create a Signin record.
+    # A task queue will send an email to the address with an access code.
+    # When access code is used, account will be confirmed if not yet done. 
     try:
-        email = data.pop('email')
-        account_exists = (True if Account.query.filter_by(email=email).first() 
-                          else False)
-        if account_exists:
-            raise sql_exc.IntegrityError
-        signin = Signin(email=email, data=data, meta={})
-        # NOTE: possibly not needed anymore, now that we're going passwordless
-        #signin.set_token(
-        #    token_type='activation_token', status='new', lang='en')
+        # first delete possible past signings with this email
+        db.session.execute(
+            db.text('delete from signins where email=:email'),
+            params={'email':email})
+        # then create new signin
+        signin = Signin(email=email)
         db.session.add(signin)
         db.session.flush()
     except sql_exc.IntegrityError as e:
         db.session.rollback()
-        json_abort(409, {'error': 'Problem creating Signin. E-mail address may '
-                         'already exist.'})
     except:
         db.session.rollback()
         raise
@@ -50,7 +70,7 @@ def post_signin(data):
     return {}, 200, []
 
 #@route('/signins/<signin_id>', methods=['DELETE'], expects_data=True,
-#       tenanted=False)
+#       domained=False)
 #def delete_signin(signin_id, data):
 #    try:
 #        Signin.query.filter(
@@ -63,7 +83,7 @@ def post_signin(data):
 #        return {'error': 'Forbidden'}, 403, []
 #
 #
-#@route('/signin/password', methods=['POST'], tenanted=False,
+#@route('/signin/password', methods=['POST'], domained=False,
 #       expects_data=True, expects_user=True, access_token_auth=True)
 #def post_signin_password(user, data):
 #    # user can only change their password

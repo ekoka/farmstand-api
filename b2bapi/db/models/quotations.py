@@ -3,7 +3,7 @@ from datetime import datetime
 
 from . import db
 
-class Quotation(db.Model, db.TenantMixin):
+class Quotation(db.Model, db.DomainMixin):
     __tablename__ = 'quotations'
 
     quotation_id = db.Column(db.UUID, primary_key=True, default=uuid4)
@@ -15,7 +15,7 @@ class Quotation(db.Model, db.TenantMixin):
 
     products = db.relationship('QuotationProduct')
 
-class QuotationEvent(db.Model, db.TenantMixin):
+class QuotationEvent(db.Model, db.DomainMixin):
     __tablename__ = 'quotation_events'
 
     quotation_event_id = db.Column(db.UUID, primary_key=True, default=uuid4)
@@ -32,14 +32,14 @@ class QuotationEvent(db.Model, db.TenantMixin):
     """
     __table_args__ = (
         db.ForeignKeyConstraint(
-            [quotation_id, 'tenant_id'],
-            ['quotations.quotation_id', 'quotations.tenant_id'],
+            [quotation_id, 'domain_id'],
+            ['quotations.quotation_id', 'quotations.domain_id'],
             'quotation_events_quotation_id_fkey',
             ondelete='CASCADE',
         ),
     )
 
-class QuotationProduct(db.Model, db.TenantMixin):
+class QuotationProduct(db.Model, db.DomainMixin):
     __tablename__ = 'quotation_products'
 
     quotation_product_id = db.Column(db.UUID, primary_key=True, default=uuid4)
@@ -71,18 +71,18 @@ class QuotationProduct(db.Model, db.TenantMixin):
     __table_args__ = (
         db.UniqueConstraint(quotation_id, product_id), # ensure 1 product_id per quotation
         db.ForeignKeyConstraint(
-            [quotation_id, 'tenant_id'], 
-            ['quotations.quotation_id', 'quotations.tenant_id'],
+            [quotation_id, 'domain_id'], 
+            ['quotations.quotation_id', 'quotations.domain_id'],
             'quotation_products_quotation_id_fkey', ondelete='CASCADE',
         ),
         db.ForeignKeyConstraint(
-            [product_id, 'tenant_id'], 
-            ['products.product_id', 'products.tenant_id'],
+            [product_id, 'domain_id'], 
+            ['products.product_id', 'products.domain_id'],
             'quotation_products_product_id_fkey', ondelete='CASCADE',
         ),
     )
 
-class QuotationProductEvent(db.Model, db.TenantMixin):
+class QuotationProductEvent(db.Model, db.DomainMixin):
     __tablename__ = 'quotation_product_events'
 
     quotation_product_event_id = db.Column(db.UUID, primary_key=True, default=uuid4)
@@ -111,15 +111,15 @@ class QuotationProductEvent(db.Model, db.TenantMixin):
     """
     __table_args__ = (
         db.ForeignKeyConstraint(
-            [quotation_product_id, 'tenant_id'], 
+            [quotation_product_id, 'domain_id'], 
             ['quotation_products.quotation_product_id', 
-             'quotation_products.tenant_id'],
+             'quotation_products.domain_id'],
             'quotation_product_events_quotation_product_id_fkey', 
             ondelete='CASCADE',
         ),
     )
 
-class QuotationProductComment(db.Model, db.TenantMixin):
+class QuotationProductComment(db.Model, db.DomainMixin):
     __tablename__ = 'quotation_product_comments'
 
     comment_id = db.Column(db.UUID, primary_key=True, default=uuid4)
@@ -132,9 +132,9 @@ class QuotationProductComment(db.Model, db.TenantMixin):
 
     __table_args__ = (
         db.ForeignKeyConstraint(
-            [quotation_product_id, 'tenant_id'], 
+            [quotation_product_id, 'domain_id'], 
             ['quotation_products.quotation_product_id', 
-             'quotation_products.tenant_id'],
+             'quotation_products.domain_id'],
             'quotation_product_comments_quotation_product_id_fkey', 
             ondelete='CASCADE',
         ),

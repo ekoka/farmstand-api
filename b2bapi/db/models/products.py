@@ -34,13 +34,13 @@ def with_clause(element, compiler, **kw):
         aliases=aliases,
         query=compiler.process(element.query))
 
-class ProductSchema(db.Model, db.TenantMixin):
+class ProductSchema(db.Model, db.DomainMixin):
     __tablename__ = 'product_schema'
 
     product_schema_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     data = db.Column(db.JSONB, default=dict)
 
-class Product(db.Model, db.TenantMixin):
+class Product(db.Model, db.DomainMixin):
     __tablename__ = 'products'
 
     product_id = db.Column(db.UUID, primary_key=True, default=uuid4)
@@ -59,13 +59,13 @@ class Product(db.Model, db.TenantMixin):
     product_family_id = db.Column(None, nullable=True)
 
     __table_args__ = (
-        db.ForeignKeyConstraint([product_family_id, 'tenant_id'], 
+        db.ForeignKeyConstraint([product_family_id, 'domain_id'], 
                                 ['product_families.product_family_id', 
-                                 'product_families.tenant_id'],
+                                 'product_families.domain_id'],
                                'products_product_family_id_fkey'),
     )
 
-class ProductFamily(db.Model, db.TenantMixin):
+class ProductFamily(db.Model, db.DomainMixin):
     """
     The idea behind product families is that some products might just be
     different versions of one another. The differing features being such
@@ -78,12 +78,12 @@ class ProductFamily(db.Model, db.TenantMixin):
     main_product_id = db.Column(None)
 
     __table_args__ = (
-        db.ForeignKeyConstraint([main_product_id, 'tenant_id'],
-                                ['products.product_id', 'products.tenant_id'],
+        db.ForeignKeyConstraint([main_product_id, 'domain_id'],
+                                ['products.product_id', 'products.domain_id'],
                                'product_families_main_product_id_fkey'),
     )
 
-class RelatedProduct(db.Model, db.TenantMixin):
+class RelatedProduct(db.Model, db.DomainMixin):
     """
     Related products are products that have some common traits, even if not
     from the same family. e.g. Gummy bear and gummy worms aren't the same
@@ -96,14 +96,14 @@ class RelatedProduct(db.Model, db.TenantMixin):
     right_id = db.Column(None)
 
     __table_args__ = (
-        db.ForeignKeyConstraint([left_id, 'tenant_id'], 
-                                ['products.product_id', 'products.tenant_id']),
-        db.ForeignKeyConstraint([right_id, 'tenant_id'], 
-                                ['products.product_id', 'products.tenant_id']),
+        db.ForeignKeyConstraint([left_id, 'domain_id'], 
+                                ['products.product_id', 'products.domain_id']),
+        db.ForeignKeyConstraint([right_id, 'domain_id'], 
+                                ['products.product_id', 'products.domain_id']),
         db.CheckConstraint(left_id<right_id),
     )
 
-class ProductSearch(db.Model, db.TenantMixin):
+class ProductSearch(db.Model, db.DomainMixin):
     __tablename__ = 'product_search'
 
     product_id = db.Column(None, primary_key=True)
@@ -111,6 +111,6 @@ class ProductSearch(db.Model, db.TenantMixin):
     search = db.Column(db.TSVector)
 
     __table_args__ = (
-        db.ForeignKeyConstraint([product_id, 'tenant_id'], 
-                                ['products.product_id', 'products.tenant_id']),
+        db.ForeignKeyConstraint([product_id, 'domain_id'], 
+                                ['products.product_id', 'products.domain_id']),
     )

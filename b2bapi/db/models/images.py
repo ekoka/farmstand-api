@@ -14,7 +14,7 @@ from . import db
 from ..trigger import Trigger, TriggerProcedure
 from ..view import view_mapper, create_view
 
-class SourceImage(db.TenantMixin, db.Model,):
+class SourceImage(db.DomainMixin, db.Model,):
     """
     Images uploaded to the server and used later as source for product images.
     """
@@ -35,7 +35,7 @@ class SourceImage(db.TenantMixin, db.Model,):
         "content_type" : <content_type>,
     } """
 
-class BaseImage(db.TenantMixin, db.Model):
+class BaseImage(db.DomainMixin, db.Model):
     """
     Compressed copies of the original uploaded source.
 
@@ -78,10 +78,10 @@ class BaseImage(db.TenantMixin, db.Model):
 
     __table_args__ = (
         db.ForeignKeyConstraint(
-            [source_image_id, 'tenant_id'], 
-            ['source_images.source_image_id', 'source_images.tenant_id'],
+            [source_image_id, 'domain_id'], 
+            ['source_images.source_image_id', 'source_images.domain_id'],
         ),
-        db.UniqueConstraint('tenant_id', 'source_image_id', 'name'),
+        db.UniqueConstraint('domain_id', 'source_image_id', 'name'),
     )
 
     source = db.relationship('SourceImage', backref='copies')
@@ -89,7 +89,7 @@ class BaseImage(db.TenantMixin, db.Model):
 
 
 
-class ProductImage(db.TenantMixin, db.Model):
+class ProductImage(db.DomainMixin, db.Model):
     """Images associated to a product. The image must first be added to the
     source image collection, via upload, if it's present on the user's local 
     machine, or via download, if it's on a remote server or cloud service.
@@ -114,11 +114,11 @@ class ProductImage(db.TenantMixin, db.Model):
     } """
 
     __table_args__ = (
-        db.ForeignKeyConstraint([product_id, 'tenant_id'], 
-                                ['products.product_id', 'products.tenant_id']),
+        db.ForeignKeyConstraint([product_id, 'domain_id'], 
+                                ['products.product_id', 'products.domain_id']),
         db.ForeignKeyConstraint(
-            [base_image_id, 'tenant_id'], 
-            ['base_images.base_image_id', 'base_images.tenant_id']
+            [base_image_id, 'domain_id'], 
+            ['base_images.base_image_id', 'base_images.domain_id']
         ),
     )
 

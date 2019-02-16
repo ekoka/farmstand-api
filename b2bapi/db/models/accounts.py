@@ -12,6 +12,7 @@ class Account(db.Model):
     email = db.Column(db.Unicode, unique=True)
     lang = db.Column(db.Unicode, default='en')
     data = db.Column(db.JSONB)
+    confirmed = db.Column(db.Boolean, default=False)
 
 class AccountAccessKey(db.Model):
     __tablename__ = 'account_access_keys'
@@ -43,6 +44,46 @@ class AccountEmail(db.Model):
     account = db.relationship(
         'Account', backref=db.backref("emails", order_by='AccountEmail.primary'))
 
+
+class Invite(db.Model, db.DomainMixin):
+    """
+    A merchant can invite users to access their catalog.
+    """
+    __tablename__ = 'invites'
+
+    email = db.Column(db.Unicode, primary_key=True)
+    status = db.Column(db.Unicode)
+    #request_date = db.Column(db.DateTime)
+    #accept_date = db.Column(db.DateTime)
+    #status_change = db.Column(db.DateTime)
+
+
+class AccessRequest(db.Model, db.DomainMixin):
+    """
+    User can request access to a merchant's catalog.
+    """
+    __tablename__ = 'access_requests'
+    account_id = db.Column(
+        None, db.ForeignKey('accounts.account_id'), primary_key=True)
+    status = db.Column(db.Unicode)
+    #request_time = db.Column(db.DateTime)
+    #role = db.Column(db.Unicode, default="user")
+
+    #__table_args__ = (
+    #    db.UniqueConstraint('domain_id', 'account_id'),
+    #)
+
+class User(db.Model, db.DomainMixin):
+    """
+    Table of accounts that were granted access to domain.
+    """
+    __tablename__ = 'users'
+    account_id = db.Column(
+        None, db.ForeignKey('accounts.account_id'), primary_key=True)
+
+#    domain = db.relationship('Domain', backref='invites')
+#
+#
 #"""
 #- Each email can be linked to multiple profiles.
 #"""
@@ -96,10 +137,10 @@ class AccountEmail(db.Model):
 #
 #
 #"""
-#- An account could administer multiple tenants to some capacity.
-#- Only one role per account per tenant.
+#- An account could administer multiple domains to some capacity.
+#- Only one role per account per domain.
 #"""
-#class AccountRoles(db.Model, db.TenantMixin):
+#class AccountRoles(db.Model, db.DomainMixin):
 #
 #    __tablename__ = 'account_roles'
 #
@@ -116,7 +157,7 @@ class AccountEmail(db.Model):
 #"""
 #- A user can request access to a merchant's catalog.
 #"""
-#class AccessRequest(db.Model, db.TenantMixin):
+#class AccessRequest(db.Model, db.DomainMixin):
 #
 #    __tablename__ = 'access_requests'
 #
@@ -129,23 +170,7 @@ class AccountEmail(db.Model):
 #    status_change = db.Column(db.DateTime)
 #
 #    account_email = db.relationship('AccountEmail', backref='access_requests')
-#    tenant = db.relationship('Tenant', backref='access_requests')
-#
-#
-#"""
-#- A merchant can invite a user to access their catalog.
-#"""
-#class InviteRequest(db.Model, db.TenantMixin):
-#
-#    __tablename__ = 'invite_requests'
-#
-#    email = db.Column(db.Unicode, primary_key=True)
-#    status = db.Column(db.Unicode)
-#    request_date = db.Column(db.DateTime)
-#    accept_date = db.Column(db.DateTime)
-#    status_change = db.Column(db.DateTime)
-#
-#    tenant = db.relationship('Tenant', backref='invites')
+#    domain = db.relationship('Domain', backref='access_requests')
 #
 #
 #"""
@@ -154,7 +179,7 @@ class AccountEmail(db.Model):
 #linked.
 #- The email field cannot be modified in a linked address.
 #"""
-#class Client(db.Model, db.TenantMixin):
+#class Client(db.Model, db.DomainMixin):
 #
 #    __tablename__ = 'clients'
 #
@@ -163,7 +188,7 @@ class AccountEmail(db.Model):
 #    linked = db.Column(db.Boolean) # linked to an Account (via email)
 #    data = db.Column(db.JSONB)
 #
-#    tenant = db.relationship('Tenant', backref='clients')
+#    domain = db.relationship('Domain', backref='clients')
 #    # TODO: create a relationship linking account_email and client
 #    # based on 'AccountEmail.email==Client.email'
 #    account_email = db.relationship(

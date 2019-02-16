@@ -52,8 +52,8 @@ def make_app(config_obj=None):
     #app.mailer = Gmail(app.config['GMAIL_LOGIN'], app.config['GMAIL_PASSWORD'])
 
     #@app.before_request
-    #def set_current_tenant():
-    #    g.tenant = get_tenant(request)
+    #def set_current_domain():
+    #    g.domain = get_domain(request)
 
 
     # english is the default
@@ -62,7 +62,7 @@ def make_app(config_obj=None):
     @app.before_request
     def set_content_lang():
         # TODO: this config should be set with values from the db, provided
-        # by the tenant admin. 
+        # by the domain admin. 
         g.enabled_langs = ['en', 'fr']
 
         # data lang is set in the qs as 'lang'
@@ -99,7 +99,7 @@ def enable_file_logging(app):
                 super(DebugFileHandler, self).emit(record)
     app.logger.addHandler(DebugFileHandler(path))
 
-def get_tenant(request):
+def get_domain(request):
     domain = current_app.config['SERVER_DOMAIN']
     try:
         subdomain = request.host.rpartition(domain)[0].strip('.') or 'www'
@@ -107,19 +107,19 @@ def get_tenant(request):
         subdomain = 'www'
 
     t = db.session.execute(
-        'select tenant_id from tenants where name = :name', 
+        'select domain_id from domains where name = :name', 
         {'name':subdomain}).fetchone()
 
     if t is None:
-        raise exc.NotFound(u'Tenant Not Found')
+        raise exc.NotFound(u'Domain Not Found')
 
-    rv = dict(tenant_id=t.tenant_id, tenant=subdomain, IMAGE_PATH={})
-    #tenant['STATIC_PATH'] = os.path.join(config['STATIC_PATH'], tenant['tenant'])
+    rv = dict(domain_id=t.domain_id, domain=subdomain, IMAGE_PATH={})
+    #domain['STATIC_PATH'] = os.path.join(config['STATIC_PATH'], domain['domain'])
     #for k,v in config['IMAGE_PATH'].items():
-    #    path = os.path.join(tenant['STATIC_PATH'], v)
+    #    path = os.path.join(domain['STATIC_PATH'], v)
     #    if not os.path.exists(path):
     #        os.makedirs(path)
-    #    tenant['IMAGE_PATH'][k] = path
+    #    domain['IMAGE_PATH'][k] = path
 
     return rv
 

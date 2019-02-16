@@ -19,5 +19,5 @@ def get_public_root():
     rv._l('simpleb2b:public-product', url_for(
         'api.get_public_product', product_id="{product_id}"), unquote=True,
         templated=True)
-        #'/api/v1/tenant-name-search?name={tenant}', templated=True)
+        #'/api/v1/domain-name-search?name={domain}', templated=True)
     return rv.document, 200, []
