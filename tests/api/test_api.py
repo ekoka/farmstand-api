@@ -1,7 +1,7 @@
 import b2bapi.api
 import pytest
 
-def test_can_connect_to_api(api_client, json):
+def test_can_connect_to_api(api_client, json, logger):
     response = api_client.get('/api/v1/')
     assert json.loads(response.data)['self']=='/api/v1/'
 

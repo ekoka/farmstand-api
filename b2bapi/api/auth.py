@@ -7,6 +7,7 @@ from sqlalchemy.orm import exc as orm_exc
 from b2bapi.db import db
 from b2bapi.db.models.accounts import Account, Signin
 from ._route import route, hal, json_abort
+from b2bapi.utils.randomstr import randomstr
     
 #@route('/clients', methods=['POST'], expects_data=True)
 #def post_client(data):
@@ -21,20 +22,20 @@ from ._route import route, hal, json_abort
 #    location = APIUrl('api_v1.get_client', client_name=client.name)
 #    return {'location': location}, 201, [('Location', location)]
 
-@route('/passcode', methods=['POST'], expects_data=True, domained=False)
-def post_passcode(data):
-    try:
-        email = data.get('email')
-        acc = Account.query.filter_by(email=email).one() 
-    except orm_exc.NoResultFound:
-        json_abort(404, {'error':'Email is not associated with an account.'})
-
-    db.session.execute(
-        db.text('delete from signins where email=:email'),
-        params={'email':email},)
-    signin = Signin(email=email, meta={'auth_type': 'login'})
-    db.session.add(signin)
-    return {}, 200, []
+#@route('/passcode', methods=['POST'], expects_data=True, domained=False)
+#def post_passcode(data):
+#    try:
+#        email = data.get('email')
+#        acc = Account.query.filter_by(email=email).one() 
+#    except orm_exc.NoResultFound:
+#        json_abort(404, {'error':'Email is not associated with an account.'})
+#
+#    db.session.execute(
+#        db.text('delete from signins where email=:email'),
+#        params={'email':email},)
+#    signin = Signin(email=email, meta={'auth_type': 'login'})
+#    db.session.add(signin)
+#    return {}, 200, []
 
 
 @route('/signins', methods=['POST'], expects_data=True, domained=False)
@@ -56,7 +57,10 @@ def post_signin(data):
             db.text('delete from signins where email=:email'),
             params={'email':email})
         # then create new signin
-        signin = Signin(email=email)
+        signin = Signin(
+            email=email, 
+            passcode=randomstr(4, ucase=False, lcase=True, digits=True),
+        )
         db.session.add(signin)
         db.session.flush()
     except sql_exc.IntegrityError as e:

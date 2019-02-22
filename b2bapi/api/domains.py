@@ -15,7 +15,7 @@ from b2bapi.db.models.reserved_names import reserved_names
 
 
 def _get_plan(plan_id=None, plan_name=None):
-    filter_by = {'plan': plan} if plan_id is None else {'name': plan_name}
+    filter_by = {'name': plan_name} if plan_id is None else {'plan_id': plan_id}
     try:
         return Plan.query.filter_by(**filter_by).one()
     except orm_exc.NoResultFound as e:
@@ -31,14 +31,14 @@ def post_domain(data, account):
     except KeyError:
         json_abort(400, {'error':'Missing catalog identifier'})
 
-    plan = _get_plan(plan_id=data.pop('plan_id', None), plan_name=data.pop(
-        'plan_name', None))
+    plan = _get_plan(plan_id=data.pop('plan_id', None), 
+                     plan_name=data.pop('plan_name', None))
         
     try:
         # name the domain
         domain = Domain(name=name)
         # add detailed information
-        domain.data = data.details or {}
+        domain.data = data.get('details') or {}
         # link the plan
         domain.plan = plan
         # record the pricing and billing cycle

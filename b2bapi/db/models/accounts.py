@@ -94,6 +94,7 @@ class Signin(db.Model):
     passcode = db.Column('passcode', db.Unicode, nullable=True)
     passcode_timestamp = db.Column(db.DateTime)
     sent = db.Column(db.Boolean, default=False)
+    fail_count = db.Column(db.Integer)
 
     #def authenticate(self, passcode):
     #    if not self.passcode==passcode:

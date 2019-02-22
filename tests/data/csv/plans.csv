@@ -1,0 +1,3 @@
+plan_id,name,plan_type,price,cycle,details
+1,limited,catalog,5900,monthly,"{""label"": {""en"": ""Limited Catalog"", ""fr"": ""Catalogue Limité""}}"
+2,flexible,catalog,9900,monthly,"{""label"": {""en"": ""Flexible Catalog"", ""fr"": ""Catalogue Flexible""}}"

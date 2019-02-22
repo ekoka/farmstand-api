@@ -1,1 +1,4 @@
-signin_id,email,passcode,passcode_timestamp,sent
+signin_id,email,passcode,passcode_timestamp,sent,fail_count
+dfd559df-d98c-4924-bd71-15a556dadca9,someemail@mymail.com,6s5p,,f,
+7dfebede-3f13-4cb3-bb59-63fdf95549f2,verysimple@gmail.com,55ld,,f,
+4534d3a3-ce16-4a80-b973-9434a4c1f77b,michael@sundry.ca,m8p8,,f,

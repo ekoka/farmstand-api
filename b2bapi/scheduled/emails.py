@@ -3,7 +3,6 @@ from datetime import datetime
 from b2bapi.db.models.signins import Signin
 from b2bapi.db import db
 from b2bapi.utils.mailer import Gmail as Mailer
-from b2bapi.utils.randomstr import randomstr
 from b2bapi.utils.uuid import clean_uuid
 
 def send(subject, content, to):
@@ -18,8 +17,6 @@ def send_passcode():
     app = dramatiq.flask_app
     signins = Signin.query.filter_by(sent=False).all()
     for s in signins:
-        code = randomstr(4, ucase=False, lcase=True, digits=True)
-        s.passcode = code
         s.passcode_timestamp = datetime.utcnow()
         lang = 'en'
         url_type = 'PASSCODE_SIGNIN_URL'

@@ -10,14 +10,13 @@ import pytest
 
 from b2bapi.config import test_config as app_config
 
-from b2bapi import (make_app, enable_file_logging, db as _db)
-from b2bapi.db.models.domains import Domain
+from b2bapi import (make_app, db as _db)
 from b2bapi.utils.serialize import json_serialize
 import b2bapi.utils.randomstr
 
 # ensuring that we're only testing from a test database
 dbname = app_config.secrets.DB_NAME
-app_config.KEEP_TEST_DATABASE = True
+app_config.KEEP_TEST_DATABASE = False
 assert dbname.startswith('test_') or dbname.endswith('_test') 
 
 
@@ -28,8 +27,6 @@ def db():
 @pytest.fixture(scope='session')
 def app(db):
     _app = make_app(app_config)
-    enable_file_logging(_app)
-    from b2bapi.db.models.domains import Domain
     with _app.app_context():
         db.drop_all()
         db.create_all()
@@ -48,8 +45,11 @@ def app(db):
         # if we want to keep the data we need to commit before closing
         # we need to close the session here, because pytest hangs if there's a
         # floating session somewhere.
-        db.session.close()
-        if not getattr(app_config, 'KEEP_TEST_DATABASE', None):
+        if getattr(app_config, 'KEEP_TEST_DATABASE', None):
+            db.session.commit()
+            db.session.close()
+        else:
+            db.session.close()
             db.drop_all()
 
 @pytest.fixture(scope='session')
@@ -58,7 +58,16 @@ def json():
     dumps = partial(_json.dumps, default=json_serialize)
     return json_nt(dumps, _json.loads)
 
-@pytest.fixture
+@pytest.fixture(scope='session')
+def jsloads(json):
+    def fnc(x):
+        try:
+            return json.loads(x)
+        except TypeError as e:
+            return json.loads(x.decode('utf8'))
+    return fnc
+
+@pytest.fixture(scope='session')
 def client(app):
     return app.test_client()
 
@@ -74,12 +83,12 @@ def base_url(app):
 def logger(app):
     return app.logger
 
-@pytest.fixture
-def api_client(client, base_url):
+@pytest.fixture(scope='session')
+def api_client(client, base_url, logger):
     # create a namedtuple to serve as client
     Client = namedtuple('Client', 'get post put patch delete')
     # api expects json-encoded data
-    api_headers = [('Content-Type', 'application/json')]
+    json_headers = ('Content-Type', 'application/json')
 
     def req(*a, **kw):
         # args as a list as opposed to a tuple
@@ -94,13 +103,16 @@ def api_client(client, base_url):
         if base_url not in path:
             kw.setdefault('base_url', base_url) 
         action = getattr(client, method)
-        kw.setdefault('headers', api_headers)
+        # if data is being submitted it's in json format.
+        # set headers to mark this.
+        if method in ('post', 'put', 'patch'):
+            kw.setdefault('headers', []).append(json_headers)
         return action(*a, **kw)
-    get = partial(req, method='get', headers=None)
+    get = partial(req, method='get', )
     post = partial(req, method='post')
     put = partial(req, method='put')
     patch = partial(req, method='patch')
-    delete = partial(req, method='delete', headers=None)
+    delete = partial(req, method='delete')
     return Client(get, post, put, patch, delete)
 
 @pytest.fixture
