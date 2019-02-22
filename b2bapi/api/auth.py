@@ -5,8 +5,7 @@ from sqlalchemy.orm import exc as orm_exc
 
 #from .validation import signins as val
 from b2bapi.db import db
-from b2bapi.db.models.signins import Signin
-from b2bapi.db.models.accounts import Account
+from b2bapi.db.models.accounts import Account, Signin
 from ._route import route, hal, json_abort
     
 #@route('/clients', methods=['POST'], expects_data=True)

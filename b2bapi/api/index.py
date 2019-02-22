@@ -6,7 +6,7 @@ from ._route import route, hal
 #def catchall(*a, **kw):
 #    abort(404)
 
-@route('/', methods=['GET'])
+@route('/', methods=['GET'], domained=False)
 def get_index():
     rv = {
         'self': url_for('api.get_index'),
@@ -25,7 +25,7 @@ def get_root():
         unquote=True)
     rv._l('simpleb2b:domains', url_for('api.post_domain'))
     #._l('simpleb2b:domain', '/api/v1/domain/{domain}', templated=True)
-    rv._l('simpleb2b:domain', url_for('api.get_domain', tname='{domain}'),
+    rv._l('simpleb2b:domain', url_for('api.get_domain', domain_name='{domain}'),
         templated=True, unquote=True)
     rv._l('simpleb2b:domain-name-check', url_for(
         'api.get_domain_name_check', name='{domain}'), templated=True,

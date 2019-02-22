@@ -7,9 +7,8 @@ from datetime import datetime
 import json
 from urllib import parse
 
-from b2bapi.db.models.signins import Signin
 from b2bapi.db.models.accounts import (
-    Account, AccountEmail, AccountAccessKey) #, Profile)
+    Account, AccountEmail, AccountAccessKey, Signin) #, Profile)
 from b2bapi.db import db
 from .domains import _get_domain_resource
 from b2bapi.utils.uuid import clean_uuid
@@ -199,6 +198,7 @@ def post_account(data):
         rv._l('simpleb2b:access_key', url_for('api.get_access_key'))
         return rv.document
 
+    #app.logger.info(db.session.connection())
     try:
         # create account, account_email and access_key
         account = create_account_from_token(token_data)

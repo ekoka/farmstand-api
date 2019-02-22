@@ -3,45 +3,60 @@ from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
 import slugify
+from datetime import datetime as dtm 
 
 from b2bapi.db.models.domains import Domain
+from b2bapi.db.models.billing import Plan, Billable, BillablePeriod
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from ._route import route, url_for, json_abort, hal
 from b2bapi.db.models.reserved_names import reserved_names
 
 
+
+def _get_plan(plan_id=None, plan_name=None):
+    filter_by = {'plan': plan} if plan_id is None else {'name': plan_name}
+    try:
+        return Plan.query.filter_by(**filter_by).one()
+    except orm_exc.NoResultFound as e:
+        json_abort(404, {'error': 'Plan not found'})
+
+
 @route('/domains', methods=['POST'], domained=False, expects_data=True, 
        expects_account=True)
 def post_domain(data, account):
     # TODO: validation
-    domain = account.domain
-    if domain:
-        domain_url = url_for('api.get_domain', domain_name=domain.name)
-        account_url = url_for('api.get_account', account_id=account.account_id)
-        rv = hal()._k('error_code', 409)
-        rv._k('error', 'company already registered')
-        rv._l('location', domain_url)
-        rv._l('account', account_url)
-        rv._embed('domain', _get_domain_resource(domain, partial=True))
-            
-        return rv.document, 409, []
-
     try:
         name = data.pop('name')
     except KeyError:
-        json_abort(400, {'error':'Missing company identifier', 'field': 'name'})
+        json_abort(400, {'error':'Missing catalog identifier'})
 
+    plan = _get_plan(plan_id=data.pop('plan_id', None), plan_name=data.pop(
+        'plan_name', None))
+        
     try:
+        # name the domain
         domain = Domain(name=name)
-        domain.data = data
-        domain.account = account
+        # add detailed information
+        domain.data = data.details or {}
+        # link the plan
+        domain.plan = plan
+        # record the pricing and billing cycle
+        domain.recorded_price = plan.price
+        domain.recorded_cycle = plan.cycle
+        # set the owner account
+        domain.owner = account
+        # enable domain
+        domain.active = True
+        # start the meter
+        domain.init_period()
+        # try flushing to the db
         db.session.add(domain)
         db.session.flush()
     except sql_exc.IntegrityError as e:
         db.session.rollback()
         json_abort(409, {
-            'error': f'The chosen company identifier "{name}"'
+            'error': f'The chosen catalog identifier "{name}"'
             ' is already taken, try a different one.'})
 
     #domain_resource = _get_domain_resource(domain, partial=True)
@@ -52,6 +67,12 @@ def post_domain(data, account):
     rv._l('location', domain_url)
     #rv._embed('domain', _get_domain_resource(domain, partial=True))
     return rv.document, 201, [('Location', domain_url)]
+
+
+def set_billable_period(billable):
+    periods = billable.recent_periods
+    bp = _start_billable_period(billable)
+    return bp
 
 
 def _get_domain_resource(domain, partial=False):

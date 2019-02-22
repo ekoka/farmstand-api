@@ -1,11 +1,10 @@
 from . import db
 
-class Domain(db.Model):
+class Domain(db.Billable):
     __tablename__ = 'domains'
 
-    domain_id = db.Column(db.Integer, primary_key=True)
-    owner_account_id = db.Column(None, db.ForeignKey(
-        'accounts.account_id'), nullable=False)
+    domain_id = db.Column(None, db.ForeignKey('billables.billable_id'),
+                          primary_key=True)
     name = db.Column(db.Unicode, unique=True)
     company_name = db.Column(db.Unicode)
     data = db.Column(db.JSONB)
@@ -23,7 +22,8 @@ class Domain(db.Model):
         "email"
     }
     """
-    owner = db.relationship('Account', backref="owned_domains")
+
+    __mapper_args__ = dict(polymorphic_identity='domains')
 
 
 class DomainAccount(db.Model):

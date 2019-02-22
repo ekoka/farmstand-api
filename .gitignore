@@ -3,7 +3,7 @@
 *config.py
 *config.ini
 gitmsg.gitcommit
-.pytest
+.pytest_cache
 thumbor/thumbor.conf
 thumbor/config.ini
 uwsgi.ini

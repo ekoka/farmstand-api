@@ -43,7 +43,7 @@ class DomainMixin(object):
 db.DomainMixin = DomainMixin
 
 from . import (
-    signins,
+    billing,
     domains,
     products,
     filters,
