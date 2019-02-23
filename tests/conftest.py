@@ -16,13 +16,17 @@ import b2bapi.utils.randomstr
 
 # ensuring that we're only testing from a test database
 dbname = app_config.secrets.DB_NAME
-app_config.KEEP_TEST_DATABASE = False
+app_config.KEEP_TEST_DATABASE = True
 assert dbname.startswith('test_') or dbname.endswith('_test') 
 
 
 @pytest.fixture(scope='session')
 def db():
     return _db
+
+@pytest.fixture
+def db_session(db):
+    return db.session
 
 @pytest.fixture(scope='session')
 def app(db):

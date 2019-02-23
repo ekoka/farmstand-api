@@ -74,6 +74,14 @@ def set_billable_period(billable):
     bp = _start_billable_period(billable)
     return bp
 
+@route('/domains', expects_account=True, domained=False)
+def get_domains(account):
+    rv = hal()
+    rv._l('self', url_for('api.get_domains'))
+    rv._embed('domains', [_get_domain_resource(b)
+                          for b in account.billables 
+                          if b.plan.plan_type=='domains'])
+    return rv.document, 200, []
 
 def _get_domain_resource(domain, partial=False):
     domain_url = url_for('api.get_domain', domain_name=domain.name)

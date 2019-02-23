@@ -21,7 +21,7 @@ def get_root():
     rv._l('simpleb2b:accounts', url_for('api.post_account'))
     #rv._l('simpleb2b:account', '/api/v1/accounts/{account_id}', templated=True)
     rv._l('simpleb2b:account', url_for(
-        'api.get_account', account_id='{account_id}'), templated=True, 
+        'api.get_account', account_id='{account_id}'), templated=True,
         unquote=True)
     rv._l('simpleb2b:domains', url_for('api.post_domain'))
     #._l('simpleb2b:domain', '/api/v1/domain/{domain}', templated=True)
