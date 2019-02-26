@@ -213,7 +213,7 @@ def data_fixture_path(test_dir):
 
 @pytest.fixture(scope='session')
 def db_load_table(data_fixture_path):
-    def load(connection, table):
+    def load(connection, table, sequence=False):
         # a subtransaction on our transaction at the db level
         transaction = connection.begin()
         cursor = connection.connection.cursor()
@@ -223,11 +223,15 @@ def db_load_table(data_fixture_path):
         FROM stdin
         WITH (FORMAT csv, DELIMITER ',', HEADER);
         """
+
+        sequence_stmt = "SELECT setval('{key}', (SELECT MAX({id}) FROM {table}));"
         with open(os.path.join(table_csv)) as f:
             #cursor.copy_from(file=f, table='accounts',sep=',')
             cursor.copy_expert(sql, file=f)
             # because we're operating on the direct db connection 
-            transaction.commit()
+        if sequence:
+            connection.execute(sequence_stmt.format(table=table, **sequence))
+        transaction.commit()
     return load 
 
 @pytest.fixture(scope='session')
@@ -239,14 +243,14 @@ def db_dump_table(data_fixture_path):
         #transaction = connection.begin()
         cursor = connection.connection.cursor()
         table_csv = os.path.join(data_fixture_path, 'csv', f'{table}.csv')
-        sql = f"""
+        sql = """
         COPY {table}
         TO stdout
         WITH (FORMAT csv, DELIMITER ',', HEADER);
         """
         with open(os.path.join(table_csv), 'w') as f:
             #cursor.copy_from(file=f, table='accounts',sep=',')
-            cursor.copy_expert(sql, file=f)
+            cursor.copy_expert(sql.format(table=table), file=f)
             # because we're operating on the direct db connection 
             #transaction.commit()
     return dump

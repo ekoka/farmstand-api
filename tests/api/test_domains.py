@@ -98,9 +98,9 @@ def test_can_post_domain_with_plan_name(
     assert response.status_code==201
 
 
-
 @pytest.mark.skip('Requires validation in API')
 def test_rejects_invalid_domain(): pass
+
 
 def test_can_list_account_domains(
     load_domains, nested_session, api_client, auth_headers,
@@ -115,6 +115,3 @@ def test_can_list_account_domains(
     names = [d['name'] for d in domain_data]
     for domain in domains:
         assert domain['name'] in names
-
-#def test_can_create_domain(access_key_finder, nested_session):
-#    findkey = access_key_finder(nested_session)

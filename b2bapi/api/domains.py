@@ -1,14 +1,11 @@
-from flask import g, abort, current_app as app, jsonify, url_for
+from flask import current_app as app
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
-import slugify
-from datetime import datetime as dtm 
 
 from b2bapi.db.models.domains import Domain
-from b2bapi.db.models.billing import Plan, Billable, BillablePeriod
+from b2bapi.db.models.billing import Plan
 from b2bapi.db import db
-from b2bapi.utils.uuid import clean_uuid
 from ._route import route, url_for, json_abort, hal
 from b2bapi.db.models.reserved_names import reserved_names
 

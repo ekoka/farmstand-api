@@ -1,6 +1,8 @@
 import pytest
+from datetime import datetime as dtm
+
 from b2bapi.db.models.accounts import Account, AccountAccessKey
-from b2bapi.db.models.billing import Plan
+from b2bapi.db.models.billing import Plan, Billable, BillablePeriod
 
 @pytest.fixture(scope='session')
 def provider(): 
@@ -92,6 +94,38 @@ def domain_data(pricing_plans):
             },
         }
     }]
+
+@pytest.fixture(scope='session')
+def period_data():
+    return [
+        # 2018-12
+        {
+            'start_timestamp': dtm(2018, 12, 3),
+            'end_timestamp': dtm(2018, 12, 15),
+            'current': False,
+        },
+        {
+            'start_timestamp': dtm(2018, 12, 17),
+            'end_timestamp': dtm(2018, 12, 27),
+            'current': False,
+        },
+        # 2019-1
+        {
+            'start_timestamp': dtm(2019, 1, 2),
+            'end_timestamp': dtm(2019, 1, 11),
+            'current': False,
+        },
+        {
+            'start_timestamp': dtm(2019, 1, 15),
+            'end_timestamp': dtm(2019, 1, 20),
+            'current': False,
+        },
+        {
+            'start_timestamp': dtm(2019, 1, 25),
+            'end_timestamp': dtm(2019, 1, 31),
+            'current': False,
+        },
+    ]
 
 @pytest.fixture(scope='session')
 def signin_data(account_data):
@@ -224,10 +258,45 @@ def load_domains(load_signins, load_pricing, db_load_table):
     def load(connection):
         load_signins(connection)
         load_pricing(connection)
-        db_load_table(connection, 'billables')
+        sequence = {'key': 'billables_billable_id_seq',
+                    'id': 'billable_id'}
+        db_load_table(connection, 'billables', sequence)
         db_load_table(connection, 'domains')
-        db_load_table(connection, 'billable_periods')
+        sequence = {'key': 'billable_periods_billable_period_id_seq',
+                    'id': 'billable_period_id'}
+        db_load_table(connection, 'billable_periods', sequence)
         pass
+    return load
+
+@pytest.fixture(scope='session')
+def dump_periods(load_domains, db_dump_table, period_data):
+    """
+    Depends:    [accounts, account_access_keys, account_emails, signins, plans,
+                 billable_periods]
+    Dumps:      [billable_periods]
+    """
+    def dump(session):
+        connection = session.connection()
+        load_domains(connection)
+        for b in session.query(Billable): # same periods each billable, easier to test
+            for p_data in period_data:
+                period = BillablePeriod(**p_data)
+                b.periods.append(period)
+        session.commit()
+        db_dump_table(session.connection(), 'billable_periods')
+
+    return dump
+
+@pytest.fixture(scope='session')
+def load_periods(load_domains):
+    """
+    Depends:    [accounts, account_access_keys, account_emails, signins, plans, 
+                 billable_periods]
+    Loads:      []
+    """
+    def load(connection):
+        # load_domains actually already loads billable_periods
+        load_domains(connection)
     return load
 
 
@@ -248,4 +317,7 @@ __all__ = [
     'dump_domains',
     'load_domains',
     'account_email',
+    'period_data',
+    'dump_periods',
+    'load_periods',
 ]

@@ -15,6 +15,7 @@ from . import accounts
 from . import quotations
 from . import product_fields
 from . import product_types
+from . import billing
 from .public import (
     products as public_product, 
     root as public_root,

@@ -145,13 +145,15 @@ class BillablePeriod(db.Model):
         # current month
 
     @property
-    def elapsed_time(self):
-        end_timestamp = self.end_timestamp or dtm.utcnow()
-        return end_timestamp - self.start_timestamp
+    def end_or_current(self):
+        if not getattr(self, '_end_or_current', None):
+            self._end_or_current = self.end_timestamp or dtm.utcnow()
+        return self._end_or_current
 
     def close(self):
         self.current = False
         self.end_timestamp = dtm.utcnow()
+        self._end_or_current = None
 
 
 class StripeCharge(db.Model):
