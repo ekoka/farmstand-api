@@ -6,6 +6,7 @@ class Plan(db.Model):
     __tablename__ = 'plans'
 
     plan_id = db.Column(db.Integer, primary_key=True)
+    stripe_plan_id = db.Column(db.Unicode, unique=True)
     name = db.Column(db.Unicode, unique=True)
     # allows to filter a type of plan. Mostly useful for listing different pricing 
     # for the same type of plans e.g. "catalog".
@@ -13,7 +14,9 @@ class Plan(db.Model):
     price = db.Column(db.Integer)
     cycle = db.Column(db.Unicode) # null, daily, weekly, monthly
     # details on the particulars of the offering
-    details = db.Column(db.JSONB, default=dict)
+    data = db.Column(db.JSONB, default=dict)
+
+    localized_fields = ['label', 'options']
 
 class BillingError(Exception):
     pass
@@ -28,6 +31,7 @@ class Billable(db.Model):
     relation = db.Column(db.Unicode)
     active = db.Column(db.Boolean)
     # recorded price and recurrence, in case underlying plan changes
+    price_timestamp = db.Column(db.DateTime)
     recorded_price = db.Column(db.Integer)
     recorded_cycle = db.Column(db.Unicode)
     log = db.Column(db.JSONB, default=dict)

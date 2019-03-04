@@ -7,21 +7,10 @@ class Domain(db.Billable):
                           primary_key=True)
     name = db.Column(db.Unicode, unique=True)
     company_name = db.Column(db.Unicode)
+    creation_date = db.Column(db.DateTime)
     data = db.Column(db.JSONB)
-    """
-    {
-        "company_name"
-        "address1"
-        "address2"
-        "city"
-        "state_province"
-        "country"
-        "zip_postal_code"
-        "telephone"
-        "website"
-        "email"
-    }
-    """
+
+    localized_fields = ['label', 'description']
 
     __mapper_args__ = dict(polymorphic_identity='domains')
 

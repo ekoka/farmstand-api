@@ -45,27 +45,27 @@ def pricing_plans():
     return [
         {
             'plan_id': 1,
-            'name': 'limited',
+            'name': 'brochure',
             'plan_type': 'domains',
             'cycle': 'monthly',
             'price': 5900,
-            'details': {
+            'data': {
                 'label': {
-                    'en': 'Limited Catalog',
-                    'fr': 'Catalogue Limité',
+                    'en': 'Limited brochure',
+                    'fr': 'Brochure limitée',
                 },
             },
         },
         {
             'plan_id': 2,
-            'name': 'flexible',
+            'name': 'portfolio',
             'plan_type': 'domains',
             'cycle': 'monthly',
             'price': 9900,
-            'details': {
+            'data': {
                 'label': {
-                    'en': 'Flexible Catalog',
-                    'fr': 'Catalogue Flexible',
+                    'en': 'Portfolio',
+                    'fr': 'Portfolio',
                 },
             },
         }
@@ -77,21 +77,17 @@ def domain_data(pricing_plans):
         'name': 'lmc',
         # with plan_name
         'plan_name': pricing_plans[-1]['name'],
-        'details': {
-            'label': {
-                'en': 'Lao Mountain Coffee',
-                'fr': 'Le Café des Montagnes du Laos',
-            },
+        #'creation_date': '2019-01-17',
+        'data': {
+            'label': 'Lao Mountain Coffee',
         }
     },{
         'name': 'greenzone',
         # with plan_id
         'plan_id': pricing_plans[0]['plan_id'],
-        'details': {
-            'label': {
-                'en': 'Notebooks for Oldskoolers',
-                'fr': 'Des Cahiers à l\'Ancienne',
-            },
+        #'creation_date': '2018-07-23',
+        'data': {
+            'label': 'Notepads for Oldskoolers',
         }
     }]
 
@@ -229,7 +225,8 @@ def load_pricing(db_load_table):
 
 @pytest.fixture(scope='session')
 def dump_domains(
-    load_pricing, load_signins, db_dump_table, api_client, domain_data, auth_headers):
+    load_pricing, load_signins, db_dump_table, api_client, domain_data, 
+    auth_headers):
     """
     Depends:    [accounts, account_access_keys, account_emails, signins, plans]
     Dumps:      [billables, domains, billable_periods]

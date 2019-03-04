@@ -1,4 +1,5 @@
 import pytest
+import requests
 from datetime import datetime as dtm, timedelta
 
 
@@ -10,15 +11,32 @@ from b2bapi.api.billing import (
     billable_report,
 )
 
+def cannot_reach_stripe():
+    if getattr(cannot_reach_stripe, 'rv', None) is not None:
+        return cannot_reach_stripe.rv
+    from b2bapi.config import test_config
+    stripe_api = 'https://api.stripe.com/'
+    try:
+        auth = (test_config.secrets.STRIPE_DEV_KEY,None)
+        r = requests.get(stripe_api, timeout=5, auth=auth)
+        cannot_reach_stripe.rv = False
+    except requests.exceptions.Timeout as e:
+        # skip processing here
+        cannot_reach_stripe.rv = True
+    return cannot_reach_stripe.rv
+
 @pytest.mark.skip('use to dump periods')
 def test_dump_periods(dump_periods, db_session):
     session = db_session
     dump_periods(session)
 
+@pytest.mark.skipif(cannot_reach_stripe(), reason='Could not reach stripe')
 def test_can_get_plans(load_pricing, nested_session, api_client, jsloads):
     load_pricing(nested_session.connection())
     data = jsloads(api_client.get('/api/v1/plans').data)
-    assert len(data['_embedded']['plans']) > 0
+    assert len(data['plans']) > 0
+    for p in data['plans']:
+        assert p['object']=='plan'
 
 def test_plans_are_delocalized(
     load_pricing, nested_session, api_client, jsloads):
@@ -27,7 +45,7 @@ def test_plans_are_delocalized(
     plan = nested_session.query(Plan).first()
     plan_data = [d for d in data['_embedded']['plans']
                  if plan.plan_id==d['plan_id']][0]
-    assert plan_data['details']['label']==plan.details['label']['fr']
+    assert plan_data['data']['label']==plan.data['label']['fr']
 
 
 def test_can_fetch_all_monthly_periods_for_billable(load_periods, nested_session):

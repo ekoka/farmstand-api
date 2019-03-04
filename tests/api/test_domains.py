@@ -6,8 +6,8 @@ from b2bapi.db.models.billing import Plan
 from b2bapi.db.models.domains import Domain
 
 @pytest.mark.skip('use to dump domains from db')
-def test_dump_domains(dump_domains, account_email, db_session):
-    session = db_session
+def test_dump_domains(dump_domains, account_email, nested_session):
+    session = nested_session
     dump_domains(session, account_email)
 
 

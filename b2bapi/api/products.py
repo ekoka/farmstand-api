@@ -475,6 +475,7 @@ For a data to be patched to the product, it must already be present.
 def patch_product(product_id, data, domain, lang):
     #data = edit_product_members.validate(data)
     p = _get_product(product_id, domain.domain_id)
+
     try:
         _localize_fields(data, lang)
     except (ValueError, AttributeError, TypeError):

@@ -13,8 +13,12 @@ class Account(db.Model):
     last_name = db.Column(db.Unicode)
     email = db.Column(db.Unicode, unique=True)
     lang = db.Column(db.Unicode, default='en')
-    data = db.Column(db.JSONB)
+    data = db.Column(db.JSONB, default=dict)
     confirmed = db.Column(db.Boolean, default=False)
+
+    # these fields should be localized in the `data` json 
+    localized_fields = ['company', 'role', 'summary', 'address', 'city',
+                        'state_province', 'country']
 
 class AccountAccessKey(db.Model):
     __tablename__ = 'account_access_keys'
@@ -171,7 +175,7 @@ class Signin(db.Model):
 #    title = db.Column(db.Unicode) # Mr, Mrs, Dr, Pr
 #    company = db.Column(db.Unicode)
 #    role = db.Column(db.Unicode) # CEO, CTO
-#    contact = db.Column(db.JSONB)
+#    contact = db.Column(db.JSONB, default=dict)
 #    """
 #    phone:
 #        mobile:
@@ -183,8 +187,8 @@ class Signin(db.Model):
 #    zip_postal_code
 #    country
 #    """
-#    preferred_languages = db.Column(db.JSONB)
-#    data = db.Column(db.JSONB)
+#    preferred_languages = db.Column(db.JSONB, default=dict)
+#    data = db.Column(db.JSONB, default=dict)
 #    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
 #    # is primary profile for this account
 #    is_primary = db.Column(db.Boolean, default=False) 
@@ -256,7 +260,7 @@ class Signin(db.Model):
 #    client_id = db.Column(db.UUID, primary_key=True)
 #    email = db.Column(db.Unicode, unique=True, nullable=True)
 #    linked = db.Column(db.Boolean) # linked to an Account (via email)
-#    data = db.Column(db.JSONB)
+#    data = db.Column(db.JSONB, default=dict)
 #
 #    domain = db.relationship('Domain', backref='clients')
 #    # TODO: create a relationship linking account_email and client

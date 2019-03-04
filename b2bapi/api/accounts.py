@@ -1,5 +1,6 @@
 import secrets
 from flask import g, abort, current_app as app, jsonify, url_for
+import stripe
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
@@ -14,8 +15,9 @@ from .domains import _get_domain_resource
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 #from b2bapi.utils.hal import Resource as Hal
-from .validation.accounts import new_account
+from .validation import accounts as val
 from ._route import route, hal, json_abort
+from .utils import localize_data, delocalize_data
 
 from b2bapi.utils.gauth import GAuth
    
@@ -202,6 +204,7 @@ def post_account(data):
     try:
         # create account, account_email and access_key
         account = create_account_from_token(token_data)
+        create_stripe_customer(account)
         return _rv(account.account_id), 201, []
     except sql_exc.IntegrityError as e:
         email = AccountEmail.query.filter_by(
@@ -352,35 +355,40 @@ def abort_account_creation(error_code=400, signin_location=None):
     resp.status_code = error_code
     abort(resp)
 
-@route('/accounts/<account_id>', domained=False, authenticate=True)
-def get_account(account_id):
+def _get_account(account_id):
+    try:
+        return Account.query.filter_by(account_id=account_id).one()
+    except orm_exc.NoResultFound as e:
+        json_abort(404, {'error': 'Account not found'})
+
+
+@route('/accounts/<account_id>', domained=False, authenticate=True,
+       expects_lang=True)
+def get_account(account_id, lang):
     self = url_for('api.get_account', account_id=account_id)
-    a = Account.query.get(account_id) 
-    return _get_account_resource(a), 200, []
+    a = _get_account(account_id)
+    return _get_account_resource(a, lang=lang), 200, []
 
 
-def _get_account_resource(account, partial=False):
+def _get_account_resource(account, lang, partial=False):
     a = account
     rv = hal()
     rv._l('self', url_for('api.get_account', account_id=account.account_id))
+    rv._l('domains', url_for('api.get_domains'))
+    # TODO maybe namespace domains url with acccount_id
+    # rv._l('domains', url_for('api.get_domains', account_id=account.account_id))
     rv._k('account_id',account.account_id)
     rv._k('first_name', account.first_name)
     rv._k('last_name', account.last_name)
 
-    #if account.domain:
-    #    rv._l('simpleb2b:domain', url_for(
-    #        'api.get_domain', tname=account.domain.name))
-    #    rv._embed('domain', _get_domain_resource(account.domain, partial=True))
     domains = [_get_domain_resource(domain.domain, partial=True) 
                for domain in account.domains]
     rv._k('roles', {d.domain.name:d.role for d in account.domains})
     rv._embed('domains', [_get_domain_resource(domain.domain, partial=True)
                           for domain in account.domains])
 
-    if partial:
-        rv._k('primary_email', account.email)
-        return rv.document
-
+    rv._k('data', delocalize_data(
+        account.data, Account.localized_fields, lang))
     rv._k('emails', [{
         'email':e.email, 
         'verified': e.verified, 
@@ -388,3 +396,23 @@ def _get_account_resource(account, partial=False):
 
     return rv.document
 
+@route('/accounts/<account_id>', methods=['PUT'], domained=False,
+       authenticate=True, expects_data=True, expects_lang=True)
+def put_account(account_id, data, lang):
+    #TODO: data validation
+    data = val.edit_account.validate(data)
+    app.logger.info(data)
+    a = _get_account(account_id)
+    data['data'] = localize_data(
+        data.get('data', {}), fields=Account.localized_fields, lang=lang)
+    a.populate(**data)
+    try:
+        db.session.flush()
+    except sql_exc.IntegrityError: 
+        db.session.rollback()
+        json_abort(400, {'error': 'Bad format'})
+    return {}, 200, []
+
+def create_stripe_customer(account):
+    customer = stripe.Customer.create()
+    account.stripe_customer_id = customer['id']

@@ -6,15 +6,17 @@ import slugify
 from datetime import datetime as dtm, timedelta
 from functools import reduce
 
+import stripe
+
 from b2bapi.db.models.domains import Domain
 from b2bapi.db.models.billing import Plan, Billable, BillablePeriod
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from ._route import route, url_for, json_abort, hal
 from b2bapi.db.models.reserved_names import reserved_names
-from .product_utils import _delocalize_data
+from .utils import localize_data, delocalize_data
 
-def _plan_resource(p, lang='en'):
+def _plan_resource(p, lang):
     rv = hal()
     rv._l('self', url_for('api.get_plan', plan_id=p.plan_id))
     rv._k('plan_id', p.plan_id)
@@ -22,9 +24,8 @@ def _plan_resource(p, lang='en'):
     rv._k('price', p.price)
     rv._k('cycle', p.cycle)
     rv._k('plan_type', p.plan_type)
-    rv._k('details', _delocalize_data(p.details, ['label', 'options'], lang))
+    rv._k('data', delocalize_data(p.data, Plan.localized_fields, lang))
     return rv.document
-
 
 @route('/plans/<plan_id>', domained=False, expects_lang=True)
 def get_plan(plan_id, lang):
@@ -36,11 +37,16 @@ def get_plan(plan_id, lang):
 
 @route('/plans', expects_params=True, domained=False, expects_lang=True)
 def get_plans(params, lang):
-    plans = Plan.query.order_by(Plan.price.asc()).all()
+    #plans = Plan.query.order_by(Plan.price.asc()).all()
+    plans = get_stripe_plans()
     rv = hal()
     rv._l('self', url_for('api.get_plans'))
-    rv._embed('plans', [_plan_resource(p, lang) for p in plans])
+    #rv._embed('plans', [_plan_resource(p, lang) for p in plans])
+    rv._k('plans', plans.data)
     return rv.document, 200, []
+
+def get_stripe_plans():
+    return stripe.Plan.list()
 
 def billable_report(b, year, month):
     b_periods = billable_monthly_periods(b, year, month)

@@ -63,19 +63,16 @@ validate them.
 My advice is to keep things as flat and simple as reasonably possible.
 """
 from copy import deepcopy
-
 from b2bapi.db.models.meta import Field
 
-
-def _localized_product_field(field, lang):
+def _localized_field(field, lang):
     rv = dict(**field)
     if field.get('field_type') in Field.text_types:
         rv['value'] = rv.setdefault('value', {}).get(lang)
     return rv
 
-def _localize_fields(record, lang):
-    for field, value in record.items():
-        # only localizes fields in record.data
+def _localize_fields(data, lang):
+    for field, value in data.items():
         if field=='data':
             for key, v in value.items():
                 if key=='fields':
@@ -88,21 +85,21 @@ def _localize_fields(record, lang):
 class Mismatch(Exception): 
     pass
 
-def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
-    # named_index: indicates that the data is a dict inside a list
-    # and should be identified with a field identified by the named_index.
-
+def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False,
+               ordered_dict_key='name'):
     # strict_keys: non-existing key raises error
 
     if len(validkeys)==0 :
-        # this is the root of the map, try key directly on record
+        # this is the root of the map, we're trying key directly on the record
         try:
             getattr(record, key)
             return True
         except AttributeError:
             raise Mismatch(f'Invalid attribute: {key}')
 
-    # the first key maps to the field itself
+    # From here on we're testing keys on JSON columns
+
+    # the first key maps to the record's base field itself
     leaf = field = getattr(record, validkeys[0])
 
     # validkeys map to values within JSON fields, that are conventionally all
@@ -117,7 +114,7 @@ def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
         if ordered_dict:
             try:
                 return [index for index,l in enumerate(leaf) 
-                        if l.get('name')==key][0]
+                        if l.get(ordered_dict_key)==key][0]
             except IndexError:
                 raise KeyError
         else:
@@ -134,7 +131,7 @@ def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
             # return None to signal that it's the case here.
             return 
 
-        # in case only existing keys and indices are allowed
+        # if strict_key, raise: only existing keys and indices are allowed
         raise Mismatch('Non-existing key')
 
 
@@ -175,7 +172,7 @@ def setval(record, keymap, key, value):
     # then set the value
     leaf[key] = value
 
-def patch_record(record, data, keymap=None):
+def patch_record(record, data, keymap=None, ordered_dict_key='name'):
 
     if keymap is None:
         keymap = []
@@ -195,9 +192,10 @@ def patch_record(record, data, keymap=None):
                 record, k, validkeys=keymap, strict_keys=not_strict)
 
             if valid is None:
-                # the special case where the key did not exist on the part of
-                # the record that it was tested on, but access method was
-                # consistent with the data type (e.g. a JSON object's field).
+                # the special case where the key did not exist directly on the 
+                # record, but method of access was consistent with the data 
+                # type it was tested on. This would be indicative that we're
+                # setting a field somewhere inside a JSON column.
                 # Set the value on the new key.
                 setval(record, keymap, k, v)
                 # go to next data item
@@ -222,11 +220,11 @@ def patch_record(record, data, keymap=None):
             for obj in data:
                 # if it went through, it's a listlike structure
                 try:
-                    # is it a sequence of dict?
-                    key = obj['name']
+                    # is this an ordered list of dicts?
+                    key = obj[ordered_dict_key]
                 except KeyError:
-                    # dict's key access method was recognized, but the key was
-                    # not found.
+                    # access method was consistent with dict type, but the key
+                    # was not found.
                     # raise because it violates the convention that any dict 
                     # in a list must have an identifying key (defaults to
                     # 'name').
@@ -286,17 +284,6 @@ def patch_record(record, data, keymap=None):
             # Finally, treat data as a simple value or list of values.
             setval(record, keymap, None, data)
 
-
-def _localize_data(data, fields, lang):
-    rv = deepcopy(data) 
-    for field in fields: 
-        path = field.split('.')
-        val = rv
-        for p in path[:-1]:
-            val = val.setdefault(p, {})
-        # reset last value to a localized dict
-        val[path[-1]] = {lang: val.get(path[-1])}
-    return rv
     
 def _merge_localized_data(old, new, fields, lang):
     for field in fields:
@@ -309,7 +296,25 @@ def _merge_localized_data(old, new, fields, lang):
         oldval.setdefault(path[-1], {})[lang] = newval.get(path[-1])
     return oldval
             
-def _delocalize_data(data, fields, lang):
+
+def localize_data(data, fields, lang):
+    """
+    add a language key to the specified fields.
+    """
+    rv = deepcopy(data) 
+    for field in fields: 
+        path = field.split('.')
+        val = rv
+        for p in path[:-1]:
+            val = val.setdefault(p, {})
+        # reset last value to a localized dict
+        val[path[-1]] = {lang: val.get(path[-1])}
+    return rv
+
+def delocalize_data(data, fields, lang):
+    """
+    remove language key from specified fields.
+    """
     rv = deepcopy(data)
     for field in fields: 
         # create a map for each localized field

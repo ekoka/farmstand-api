@@ -1,3 +1,4 @@
+from datetime import datetime as dtm
 from flask import current_app as app
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
@@ -8,6 +9,7 @@ from b2bapi.db.models.billing import Plan
 from b2bapi.db import db
 from ._route import route, url_for, json_abort, hal
 from b2bapi.db.models.reserved_names import reserved_names
+from .utils import localize_data, delocalize_data
 
 
 
@@ -20,8 +22,8 @@ def _get_plan(plan_id=None, plan_name=None):
 
 
 @route('/domains', methods=['POST'], domained=False, expects_data=True, 
-       expects_account=True)
-def post_domain(data, account):
+       expects_account=True, expects_lang=True)
+def post_domain(data, account, lang):
     # TODO: validation
     try:
         name = data.pop('name')
@@ -35,10 +37,15 @@ def post_domain(data, account):
         # name the domain
         domain = Domain(name=name)
         # add detailed information
-        domain.data = data.get('details') or {}
+        if data.get('data'):
+            domain.data = localize_data(
+                data['data'], Domain.localized_fields, lang)
+        #domain.company_name = data.get('company_name')
         # link the plan
         domain.plan = plan
+        domain.creation_date = dtm.utcnow()
         # record the pricing and billing cycle
+        domain.price_timestamp = dtm.utcnow()
         domain.recorded_price = plan.price
         domain.recorded_cycle = plan.cycle
         # set the owner account
@@ -52,6 +59,7 @@ def post_domain(data, account):
         db.session.flush()
     except sql_exc.IntegrityError as e:
         db.session.rollback()
+        raise
         json_abort(409, {
             'error': f'The chosen catalog identifier "{name}"'
             ' is already taken, try a different one.'})
@@ -94,6 +102,8 @@ def _get_domain_resource(domain, partial=False):
     #inquiries_url = url_for('api.get_inquiries', domain=domain.name)
     rv = hal()._l('self', domain_url)
     rv._k('name', domain.name)
+    rv._k('company_name', domain.company_name)
+    rv._k('creation_date', domain.creation_date.date())
     #rv._l('simpleb2b:account', account_url)
     rv._l('simpleb2b:product_schema', product_schema_url)
     rv._l('simpleb2b:filters', filters_url)
