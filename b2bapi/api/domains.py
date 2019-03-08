@@ -1,4 +1,4 @@
-from datetime import datetime as dtm
+from datetime import datetime as dtm, timedelta
 from flask import current_app as app
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
@@ -9,14 +9,14 @@ from b2bapi.db.models.billing import Plan
 from b2bapi.db import db
 from ._route import route, url_for, json_abort, hal
 from b2bapi.db.models.reserved_names import reserved_names
-from .utils import localize_data, delocalize_data
+from .utils import localize_data, delocalize_data, StripeContext
 
 
 
-def _get_plan(plan_id=None, plan_name=None):
+def _get_plan(plan_id):
     filter_by = {'name': plan_name} if plan_id is None else {'plan_id': plan_id}
     try:
-        return Plan.query.filter_by(**filter_by).one()
+        return Plan.query.filter(plan_id=plan_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Plan not found'})
 
@@ -30,42 +30,53 @@ def post_domain(data, account, lang):
     except KeyError:
         json_abort(400, {'error':'Missing catalog identifier'})
 
-    plan = _get_plan(plan_id=data.pop('plan_id', None), 
-                     plan_name=data.pop('plan_name', None))
-        
-    try:
+    plan = _get_plan(plan_id=data.pop('plan_id', None))
+
+    if not account.stripe_customer_id:
+        json_abort(403, {'error': 'Account does not have a linked Stripe '
+                         'account'})
+
+    next_month = dtm.now().replace(day=28) + timedelta(days=4)
+    first_of_next_month = next_month.replace(day=1).timestamp()
+
+    with StripeContext() as ctx:
+
+        def duplicate_nicknames(*a,**kw):
+            json_abort(409, {'error': 'The chosen catalog nickname '
+                             'is already taken, try a different one.'})
+        ctx.register_handler(
+            error_type=sql_exc.IntegrityError,
+            handler=duplicate_nicknames
+        )
+
         # name the domain
         domain = Domain(name=name)
+        domain.owner = account
+        db.session.add(domain)
         # add detailed information
         if data.get('data'):
             domain.data = localize_data(
                 data['data'], Domain.localized_fields, lang)
-        #domain.company_name = data.get('company_name')
-        # link the plan
-        domain.plan = plan
-        domain.creation_date = dtm.utcnow()
-        # record the pricing and billing cycle
-        domain.price_timestamp = dtm.utcnow()
-        domain.recorded_price = plan.price
-        domain.recorded_cycle = plan.cycle
-        # set the owner account
-        domain.owner = account
+
         # enable domain
         domain.active = True
-        # start the meter
-        domain.init_period()
-        # try flushing to the db
-        db.session.add(domain)
-        db.session.flush()
-    except sql_exc.IntegrityError as e:
-        db.session.rollback()
-        raise
-        json_abort(409, {
-            'error': f'The chosen catalog identifier "{name}"'
-            ' is already taken, try a different one.'})
 
-    #domain_resource = _get_domain_resource(domain, partial=True)
-    #domain_url = domain_resource['_links']['self']['href']
+        db.session.flush()
+
+        # if everything went well, start the meter
+
+        # subscribe customer to plan on stripe
+        subscription = ctx.stripe.Subscription.create(
+            customer=account.stripe_customer_id,
+            items=[{'plan': data['plan_id']}],
+            trial_period_days=30,
+            billing_cycle_anchor=first_of_next_month,
+        )
+
+        # link stripe data to local
+        domain.subscription_id = subscription.id
+        domain.subscription_data = subscription
+
     rv = hal()
 
     domain_url = url_for('api.get_domain', domain_name=domain.name)
@@ -73,11 +84,6 @@ def post_domain(data, account, lang):
     #rv._embed('domain', _get_domain_resource(domain, partial=True))
     return rv.document, 201, [('Location', domain_url)]
 
-
-def set_billable_period(billable):
-    periods = billable.recent_periods
-    bp = _start_billable_period(billable)
-    return bp
 
 @route('/domains', expects_account=True, domained=False)
 def get_domains(account):

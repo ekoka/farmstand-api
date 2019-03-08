@@ -1,17 +1,24 @@
 import pytest
 import json
 from urllib import parse
+import stripe
 
 from b2bapi.db.models.accounts import Account, AccountAccessKey, Signin
+from ..conftest import cannot_reach_stripe
 
+@pytest.mark.skipif(cannot_reach_stripe(), reason='Could not reach stripe')
 def test_can_create_account_with_simpleb2b(
     api_client, account_data, nested_session):
     # simpleb2b as provider
     # TODO change this to `productlist`
     response = api_client.post('/api/v1/accounts', json=account_data[0])
     acc = nested_session.execute('select * from accounts').fetchone()
+    customer = stripe.Customer.retrieve(acc.stripe_customer_id)
+
     assert acc.email==account_data[0]['token']['email']
     assert acc.lang==account_data[0]['token']['lang']
+    assert customer['id']==acc.stripe_customer_id
+    customer.delete()
 
 
 @pytest.mark.skip('Use to populated and dump db with account data.')

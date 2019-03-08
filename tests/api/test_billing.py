@@ -10,20 +10,7 @@ from b2bapi.api.billing import (
     period_charges,
     billable_report,
 )
-
-def cannot_reach_stripe():
-    if getattr(cannot_reach_stripe, 'rv', None) is not None:
-        return cannot_reach_stripe.rv
-    from b2bapi.config import test_config
-    stripe_api = 'https://api.stripe.com/'
-    try:
-        auth = (test_config.secrets.STRIPE_DEV_KEY,None)
-        r = requests.get(stripe_api, timeout=5, auth=auth)
-        cannot_reach_stripe.rv = False
-    except requests.exceptions.Timeout as e:
-        # skip processing here
-        cannot_reach_stripe.rv = True
-    return cannot_reach_stripe.rv
+from ..conftest import cannot_reach_stripe
 
 @pytest.mark.skip('use to dump periods')
 def test_dump_periods(dump_periods, db_session):

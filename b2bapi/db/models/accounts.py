@@ -9,6 +9,7 @@ from datetime import datetime as dtm
 class Account(db.Model):
     __tablename__ = 'accounts'
     account_id = db.Column(db.UUID, primary_key=True, default=uuid4)
+    stripe_customer_id = db.Column(db.Unicode, unique=True, nullable=False)
     first_name = db.Column(db.Unicode)
     last_name = db.Column(db.Unicode)
     email = db.Column(db.Unicode, unique=True)
@@ -20,12 +21,23 @@ class Account(db.Model):
     localized_fields = ['company', 'role', 'summary', 'address', 'city',
                         'state_province', 'country']
 
+
+class PaymentSource(db.Model):
+    __tablename__ = 'payment_sources'
+    source_id = db.Column(db.Unicode, primary_key=True)
+    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
+    data = db.Column(db.JSONB, default=dict)
+    default_source = db.Column(db.Boolean, default=False)
+
+    account = db.relationship(Account, backref='payment_sources')
+
 class AccountAccessKey(db.Model):
     __tablename__ = 'account_access_keys'
 
     key = db.Column(db.Unicode, primary_key=True)
     account_id = db.Column(
-        None, db.ForeignKey('accounts.account_id'), unique=True, nullable=False)
+        None, db.ForeignKey('accounts.account_id'), unique=True,
+        nullable=False)
     secret = db.Column(db.Unicode)
     fail_count = db.Column(db.Integer, default=0)
     fail_timestamp = db.Column(db.DateTime)

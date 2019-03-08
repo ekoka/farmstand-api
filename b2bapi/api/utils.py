@@ -64,6 +64,9 @@ My advice is to keep things as flat and simple as reasonably possible.
 """
 from copy import deepcopy
 from b2bapi.db.models.meta import Field
+from b2bapi.db import db
+import stripe
+from ._route import route, url_for, json_abort, hal
 
 def _localized_field(field, lang):
     rv = dict(**field)
@@ -327,3 +330,34 @@ def delocalize_data(data, fields, lang):
         # replace the value of the last item by its localized version
         val[path[-1]] = val.get(path[-1], {}).get(lang)
     return rv
+
+
+class StripeContext:
+
+    def __init__(self):
+        self.stripe = stripe
+        self.handlers = {}
+
+    def register_handler(self, error_type, handler):
+        self.handlers[error_type] = handler
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, e_type, e_value, traceback):
+        if e_type:
+            # first rollback db session
+            db.session.rollback()
+            if self.handlers.get(e_type):
+                self.handlers[e_type](e_value, traceback)
+            elif e_type==stripe.error.CardError: 
+                msg = err.get('message', 'Could not process request')
+                code = e_value.http_status
+                json_abort(code, {'error': msg})
+            #elif e_type==stripe.error.RateLimitError: 
+            #elif e_type==stripe.error.InvalidRequestError: 
+            #elif e_type==stripe.error.AuthenticationError: 
+            #elif e_type==stripe.error.APIConnectionError: 
+            #elif e_type==stripe.error.StripeError: 
+            else:
+                json_abort(400, {'error': 'Could not process request'})

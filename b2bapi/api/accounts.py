@@ -54,23 +54,11 @@ def put_access_key(data):
         email=token_data.get('email'), login=True).first()
 
     if not email:
-        return {
-            '_links': {
-                'curies': [{
-                    'name': 'simpleb2b',
-                    'templated': True,
-                    'href': 'https://api.simpleb2b.io/docs/{rel}'
-                }],
-                'self': {
-                    'href': url_for('api.get_access_key'),
-                },
-                'simpleb2b:account-create': {
-                    'href': url_for('api.post_account'),
-                },
-                   
-            },
-            'error': 'Account not found',
-        }, 404, []
+        rv = hal()
+        rv._l('access_key', url_for('api.get_access_key'))
+        rv._l('accounts', url_for('api.post_account'))
+        rv._k('error', 'Account not found')
+        return rv, 404, []
 
     # if we got here it means we have indeed verified the token's email
     # let's update our account's email 
@@ -88,22 +76,11 @@ def put_access_key(data):
     db.session.flush()
     access_key = email.account.access_key
 
-    return {
-        '_links': {
-            'curies': [{
-                'name': 'simpleb2b',
-                'templated': True,
-                'href': 'https://api.simpleb2b.io/docs/{rel}'
-            }],
-            'self': {
-                'href': url_for('api.get_access_key'),
-            },
-            'simpleb2b:account': {
-                'href': url_for('api.get_account', account_id=email.account_id),
-            },
-        },
-        'key': access_key.key
-    }, 200, []
+    rv = hal()
+    rv._l('access_key', url_for('api.get_access_key'))
+    rv._l('account', url_for('api.get_account', account_id=email.account_id))
+    rv._k('access_key', access_key.key)
+    return rv, 200, []
 
 
 def _access_key(access_key):
@@ -204,9 +181,9 @@ def post_account(data):
     try:
         # create account, account_email and access_key
         account = create_account_from_token(token_data)
-        create_stripe_customer(account)
         return _rv(account.account_id), 201, []
     except sql_exc.IntegrityError as e:
+        raise
         email = AccountEmail.query.filter_by(
             email=token_data.get('email')).first()
         doc =  _rv(email.account_id)
@@ -302,6 +279,7 @@ def create_account_from_token(profile):
     email.account = account
 
     try:
+        create_stripe_customer(account)
         db.session.add(account)
         db.session.flush()
         return account
@@ -375,6 +353,11 @@ def _get_account_resource(account, lang, partial=False):
     rv = hal()
     rv._l('self', url_for('api.get_account', account_id=account.account_id))
     rv._l('domains', url_for('api.get_domains'))
+    rv._l('payment_sources', url_for('api.post_payment_source'))
+
+    rv._l('payment_source', url_for(
+        'api.delete_payment_source', source_id='{source_id}'), templated=True,
+        unquote=True)
     # TODO maybe namespace domains url with acccount_id
     # rv._l('domains', url_for('api.get_domains', account_id=account.account_id))
     rv._k('account_id',account.account_id)
@@ -416,3 +399,5 @@ def put_account(account_id, data, lang):
 def create_stripe_customer(account):
     customer = stripe.Customer.create()
     account.stripe_customer_id = customer['id']
+
+

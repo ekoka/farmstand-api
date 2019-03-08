@@ -7,6 +7,7 @@ from functools import partial
 import simplejson as _json
 from  collections import namedtuple
 import pytest
+import requests
 
 from b2bapi.config import test_config as app_config
 
@@ -18,6 +19,19 @@ import b2bapi.utils.randomstr
 dbname = app_config.secrets.DB_NAME
 app_config.KEEP_TEST_DATABASE = True
 assert dbname.startswith('test_') or dbname.endswith('_test') 
+
+def cannot_reach_stripe():
+    if getattr(cannot_reach_stripe, 'rv', None) is not None:
+        return cannot_reach_stripe.rv
+    stripe_api = 'https://api.stripe.com/'
+    try:
+        auth = (app_config.secrets.STRIPE_DEV_KEY,None)
+        r = requests.get(stripe_api, timeout=5, auth=auth)
+        cannot_reach_stripe.rv = False
+    except requests.exceptions.Timeout as e:
+        # skip processing here
+        cannot_reach_stripe.rv = True
+    return cannot_reach_stripe.rv
 
 
 @pytest.fixture(scope='session')
