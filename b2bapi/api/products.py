@@ -46,7 +46,7 @@ def get_products(params, domain, lang):
     product_url = url_for('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', url_for('api.get_products', **params))
-    rv._l('simpleb2b:product', product_url, unquote=True, templated=True)
+    rv._l('productlist:product', product_url, unquote=True, templated=True)
     rv._k('product_ids', [p.product_id for p in products])
     return rv.document, 200, []
 

@@ -351,7 +351,7 @@ class StripeContext:
             if self.handlers.get(e_type):
                 self.handlers[e_type](e_value, traceback)
             elif e_type==stripe.error.CardError: 
-                msg = err.get('message', 'Could not process request')
+                msg = err.get('message', 'Problem with payment method')
                 code = e_value.http_status
                 json_abort(code, {'error': msg})
             #elif e_type==stripe.error.RateLimitError: 
@@ -360,4 +360,5 @@ class StripeContext:
             #elif e_type==stripe.error.APIConnectionError: 
             #elif e_type==stripe.error.StripeError: 
             else:
+                raise
                 json_abort(400, {'error': 'Could not process request'})

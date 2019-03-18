@@ -14,9 +14,8 @@ from .utils import localize_data, delocalize_data, StripeContext
 
 
 def _get_plan(plan_id):
-    filter_by = {'name': plan_name} if plan_id is None else {'plan_id': plan_id}
     try:
-        return Plan.query.filter(plan_id=plan_id).one()
+        return Plan.query.filter_by(plan_id=plan_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Plan not found'})
 
@@ -36,8 +35,11 @@ def post_domain(data, account, lang):
         json_abort(403, {'error': 'Account does not have a linked Stripe '
                          'account'})
 
-    next_month = dtm.now().replace(day=28) + timedelta(days=4)
-    first_of_next_month = next_month.replace(day=1).timestamp()
+    trial_period_days = 30
+    trial_end_date = dtm.utcnow() + timedelta(days=trial_period_days)
+    month_after_trial = trial_end_date.replace(day=28) + timedelta(days=4)
+    #next_month = dtm.now().replace(day=28) + timedelta(days=4)
+    billing_cycle_anchor = int(month_after_trial.replace(day=1).timestamp())
 
     with StripeContext() as ctx:
 
@@ -51,7 +53,12 @@ def post_domain(data, account, lang):
 
         # name the domain
         domain = Domain(name=name)
+        # link to account
         domain.owner = account
+        # set plan
+        domain.plan = plan
+        # activate
+        domain.active = True
         db.session.add(domain)
         # add detailed information
         if data.get('data'):
@@ -61,19 +68,26 @@ def post_domain(data, account, lang):
         # enable domain
         domain.active = True
 
+
         db.session.flush()
+
+        metadata = {
+            'domain_id': domain.domain_id,
+            'domain_nickname': domain.name,
+        }
 
         # if everything went well, start the meter
 
         # subscribe customer to plan on stripe
         subscription = ctx.stripe.Subscription.create(
             customer=account.stripe_customer_id,
-            items=[{'plan': data['plan_id']}],
-            trial_period_days=30,
-            billing_cycle_anchor=first_of_next_month,
+            items=[{'plan': plan.plan_id}],
+            trial_period_days=trial_period_days,
+            billing_cycle_anchor=billing_cycle_anchor,
+            metadata=metadata,
         )
 
-        # link stripe data to local
+        # link stripe data to local billable
         domain.subscription_id = subscription.id
         domain.subscription_data = subscription
 
@@ -81,20 +95,54 @@ def post_domain(data, account, lang):
 
     domain_url = url_for('api.get_domain', domain_name=domain.name)
     rv._l('location', domain_url)
-    #rv._embed('domain', _get_domain_resource(domain, partial=True))
+    rv._k('domain_name', domain.name)
     return rv.document, 201, [('Location', domain_url)]
 
+def _subscription_data(subscription):
+    #TODO
+    #"current_period_start": 1552054799,
+    #"current_period_end": 1554733199,
+    #"status": "active",
+    rv = {
+        "id": "sub_Ef3fWeFTQIbqr5",
+        "billing_cycle_anchor": 1552054799,
+        "canceled_at": null,
+        "created": 1552054799,
+        "quantity": 1,
+        "start": 1552054799,
+        "tax_percent": null,
+        "trial_start": null,
+        "trial_end": null,
+        "default_source": null,
+        "discount": null,
+        "ended_at": null,
+        "latest_invoice": null,
+        "metadata": {},
+        "plan": {
+            "id": "gold",
+            "amount": 2000,
+            "currency": "cad",
+            "interval": "month",
+            "interval_count": 1,
+            "nickname": null,
+            "product": "prod_BTMywD3UV6AkeY",
+            "trial_period_days": null,
+        },
+    }
+    
+    return rv
 
-@route('/domains', expects_account=True, domained=False)
-def get_domains(account):
+
+@route('/domains', expects_account=True, domained=False, expects_lang=True)
+def get_domains(account, lang):
     rv = hal()
     rv._l('self', url_for('api.get_domains'))
-    rv._embed('domains', [_get_domain_resource(b)
+    rv._embed('domains', [_get_domain_resource(b, lang)
                           for b in account.billables 
                           if b.plan.plan_type=='domains'])
     return rv.document, 200, []
 
-def _get_domain_resource(domain, partial=False):
+def _get_domain_resource(domain, lang, partial=False):
     domain_url = url_for('api.get_domain', domain_name=domain.name)
     #account_url = url_for('api.get_account', account_id=domain.account_id)
     product_schema_url = url_for('api.get_product_schema', domain=domain.name)
@@ -108,33 +156,63 @@ def _get_domain_resource(domain, partial=False):
     #inquiries_url = url_for('api.get_inquiries', domain=domain.name)
     rv = hal()._l('self', domain_url)
     rv._k('name', domain.name)
-    rv._k('company_name', domain.company_name)
     rv._k('creation_date', domain.creation_date.date())
-    #rv._l('simpleb2b:account', account_url)
-    rv._l('simpleb2b:product_schema', product_schema_url)
-    rv._l('simpleb2b:filters', filters_url)
-    rv._l('simpleb2b:products', products_url)
-    rv._l('simpleb2b:source_images', source_images_url)
-    rv._l('simpleb2b:images', images_url)
-    #rv._l('simpleb2b:inquiries', inquiries_url)
-    rv._l('simpleb2b:product', product_url, unquote=True, templated=True )
-    rv._l('simpleb2b:product_details', product_details_url)
-    if partial:
-        return rv._k('_partial', True).document
+    #rv._l('productlist:account', account_url)
+    rv._l('productlist:product_schema', product_schema_url)
+    rv._l('productlist:filters', filters_url)
+    rv._l('productlist:products', products_url)
+    rv._l('productlist:source_images', source_images_url)
+    rv._l('productlist:images', images_url)
+    #rv._l('productlist:inquiries', inquiries_url)
+    rv._l('productlist:product', product_url, unquote=True, templated=True )
+    rv._l('productlist:product_details', product_details_url)
 
     # include company info
-    for k,v in domain.data.items():
-        rv._k(k, v)
+    rv._k('data', delocalize_data(domain.data, Domain.localized_fields, lang))
+    rv._k('meta', domain.meta)
 
     return rv.document
 
-@route('/domain/<domain_name>', domained=False, authenticate=True)
-def get_domain(domain_name):
+def _get_domain(domain_name, account_id):
     try:
-        domain = Domain.query.filter(Domain.name==domain_name).one()
+        return Domain.query.filter_by(
+            name=domain_name, 
+            owner_account_id=account_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error_code': 404, 'error': 'Domain not found'})
-    return _get_domain_resource(domain), 200, []
+
+@route('/domain/<domain_name>', domained=False, authenticate=True, 
+       expects_lang=True, expects_account=True)
+def get_domain(domain_name, account, lang):
+    domain = _get_domain(
+        domain_name=domain_name, account_id=account.account_id)
+    return _get_domain_resource(domain, lang), 200, []
+
+@route('/domain/<domain_name>', methods=['put'], domained=False, authenticate=True, 
+       expects_lang=True, expects_account=True, expects_data=True)
+def put_domain(domain_name, data, account, lang):
+    # TODO: validation
+    domain = _get_domain(
+        domain_name=domain_name, account_id=account.account_id)
+
+    # changing localized data
+    domain.data = localize_data(
+        data.get('data', {}), Domain.localized_fields, lang)
+
+    # changing metadata
+    domain.meta = data.get('meta', {})
+
+    try:
+        # only change domain's active state if explicitly set in posted data
+        if data['active'] in [True, False]:
+            domain.active = data['active']
+    except KeyError:
+        pass
+
+    db.session.flush()
+    return {}, 200, []
+
+
 
 @route('/domain-name-check', domained=False, expects_params=True)
 def get_domain_name_check(params):

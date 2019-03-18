@@ -1,0 +1,9 @@
+[Unit]
+Description=WSGI HTTP Service for Productlist API
+
+[Service]
+Type=simple
+ExecStart=/home/mike/envs/spc/bin/gunicorn --bind localhost:9898 --chdir /home/mike/simpleb2b/mvpapi --error-logfile /home/mike/simpleb2b/mvpapi/logs/gunicorn-error.log --access-logfile /home/mike/simpleb2b/mvpapi/logs/gunicorn-access.log wsgiapi:app
+
+[Install]
+WantedBy=default.target

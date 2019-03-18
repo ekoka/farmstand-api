@@ -14,7 +14,6 @@ from b2bapi.db import db
 from .domains import _get_domain_resource
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
-#from b2bapi.utils.hal import Resource as Hal
 from .validation import accounts as val
 from ._route import route, hal, json_abort
 from .utils import localize_data, delocalize_data
@@ -25,12 +24,12 @@ def generate_key(length=24):
     return secrets.token_urlsafe(length)
 
 
-def create_access_key(account_id, reset=False):
-    db.session.execute(
-        'delete from account_access_keys where account_id=:account_id',
-        {'account_id': account_id})
-    return AccountAccessKey(key=generate_key(24), account_id=account_id)
-
+#def create_access_key(account_id, reset=False):
+#    db.session.execute(
+#        'delete from account_access_keys where account_id=:account_id',
+#        {'account_id': account_id})
+#    return AccountAccessKey(key=generate_key(24), account_id=account_id)
+#
 
 """
 - an access key can only be created by providing an authentication token.
@@ -39,111 +38,105 @@ where it provides a temporary token that may not be verified.
 - but that token is restricted to creating a new account.
 - not accessing existing ones.
 """
-@route('/access-key', methods=['PUT'], domained=False, expects_data=True)
-def put_access_key(data):
+#@route('/access-key', methods=['PUT'], domained=False, expects_data=True)
+#def put_access_key(data):
+#    token_data = _verify_auth_token(data)
+#    if not token_data:
+#        return {'error': 'Invalid token'}, 400, []
+#
+#    # only authenticate verified emails.
+#    #if not token_data.get('email_verified', False):
+#    #    return {'error': 'Email not verified'}, 400, []
+#
+#    # use a login email account (login=True)
+#    email = AccountEmail.query.filter_by(
+#        email=token_data.get('email'), login=True).first()
+#
+#    if not email:
+#        rv = hal()
+#        rv._l('access_key', url_for('api.post_access_key'))
+#        rv._l('accounts', url_for('api.post_account'))
+#        rv._k('error', 'Account not found')
+#        return rv, 404, []
+#
+#    # if we got here it means we have indeed verified the token's email
+#    # let's update our account's email 
+#    email.verified = True
+#    email.account.confirmed = True
+#
+#    try:
+#        email.account.access_key = create_access_key(email.account.account_id)
+#    except sql_exc.IntegrityError as e:
+#        db.session.rollback()
+#        return {
+#            'error': 'Could not create key. Try again later.'
+#        }, 409, []
+#
+#    db.session.flush()
+#    access_key = email.account.access_key
+#
+#    rv = hal()
+#    rv._l('access_key', url_for('api.post_access_key'))
+#    rv._l('account', url_for('api.get_account', account_id=email.account_id))
+#    rv._k('access_key', access_key.key)
+#    return rv, 200, []
+
+
+def _verify_password_token(data):
+    #try:
+    #    data = json.loads(parse.unquote(data))
+    #except:
+    #    json_abort(400, {'error': 'Invalid token'})
+
+    account = Account.query.join(AccountEmail).filter(
+        AccountEmail.email==data['email'], AccountEmail.login==True).first()
+    if not account:
+        return 
+
+    if account.authenticate(data['password']):
+        return {'email': data['email']}
+
+
+@route('/access-token', methods=['POST'], domained=False, expects_data=True,)
+def post_access_token(data):
     token_data = _verify_auth_token(data)
     if not token_data:
-        return {'error': 'Invalid token'}, 400, []
+        json_abort(401, {'error': 'Not authorized'})
 
-    # only authenticate verified emails.
-    #if not token_data.get('email_verified', False):
-    #    return {'error': 'Email not verified'}, 400, []
-
-    # use a login email account (login=True)
     email = AccountEmail.query.filter_by(
         email=token_data.get('email'), login=True).first()
 
     if not email:
-        rv = hal()
-        rv._l('access_key', url_for('api.get_access_key'))
-        rv._l('accounts', url_for('api.post_account'))
-        rv._k('error', 'Account not found')
-        return rv, 404, []
+        json_abort(401, {'error': 'Not authorized'})
 
     # if we got here it means we have indeed verified the token's email
     # let's update our account's email 
     email.verified = True
     email.account.confirmed = True
-
-    try:
-        email.account.access_key = create_access_key(email.account.account_id)
-    except sql_exc.IntegrityError as e:
-        db.session.rollback()
-        return {
-            'error': 'Could not create key. Try again later.'
-        }, 409, []
-
     db.session.flush()
-    access_key = email.account.access_key
+
+    access_key = AccountAccessKey(
+        key=generate_key(24), account_id=email.account_id)
+
+    db.session.add(access_key)
+    db.session.flush()
 
     rv = hal()
-    rv._l('access_key', url_for('api.get_access_key'))
-    rv._l('account', url_for('api.get_account', account_id=email.account_id))
-    rv._k('access_key', access_key.key)
-    return rv, 200, []
+    rv._l('self', url_for('api.post_access_token'))
+    rv._l('productlist:account', url_for(
+          'api.get_account', account_id=access_key.account_id))
+    rv._k('access_token', access_key.key)
+    # when setting cookie access token
+    # g.access_key = access_key.key
+    return rv.document, 200, []
 
 
-def _access_key(access_key):
-    return {
-        '_links': {
-            'curies': [{
-                'name': 'simpleb2b',
-                'templated': True,
-                'href': 'https://api.simpleb2b.io/docs/{rel}'
-            }],
-            'self': {
-                'href': url_for('api.get_access_key'),
-            },
-            'simpleb2b:account': {
-                'href': url_for('api.get_account', account_id=access_key.account_id),
-            },
-        },
-        'access_key': access_key.key
-    }
-
-@route('/access-key', domained=False, expects_params=True)
-def get_access_key(params):
-    token_data = _verify_auth_token(params)
-    if not token_data:
-        json_abort(400, {'error': 'Invalid token'})
-
-    # find email record, with login authorization
-    email = AccountEmail.query.filter_by(
-        email=token_data.get('email'), login=True).first()
-
-    if not email:
-        return {
-            '_links': {
-                'curies': [{
-                    'name': 'simpleb2b',
-                    'templated': True,
-                    'href': 'https://api.simpleb2b.io/docs/{rel}'
-                }],
-                'self': {
-                    'href': url_for('api.get_access_key'),
-                    #'simpleb2b:account-create': url_for('api.post_account'),
-                },
-                   
-            },
-            'error': 'Account not found'
-        }, 404, []
-
-    # if we got here it means we have indeed verified the token's email
-    # let's update our account's email 
-    email.verified = True
-    email.account.confirmed = True
+@route('/access-token', methods=['DELETE'], domained=False, authenticate=True,
+       expects_access_token=True)
+def delete_access_token(access_token):
+    db.session.delete(access_token)
     db.session.flush()
-
-    try:
-         rv = _access_key(email.account.access_key)
-    except:
-        # we should normally never end here as an account should always have
-        # an access_key, but just in case the key was somehow deleted, let's
-        # put things back into a more stable state.
-        email.account.access_key = create_access_key(email.account.account_id)
-        rv = _access_key(email.account.access_key)
-    return rv, 200, []
-
+    return {}, 200, []
 
 """
 token may contain an unconfirmed email
@@ -159,9 +152,14 @@ def post_account(data):
     try:
         provider, token = data['provider'], data['token']
         if provider.lower()=='google':
+            # first fetch the data from google
             token_data = _verify_google_token(token)
-        elif provider.lower()=='simpleb2b':
-            token_data = _get_email_registration_data(token)
+            # next normalize data to fit the rest of the flow
+            token_data = val.new_account_via_google.validate(token_data)
+        elif provider.lower()=='productlist':
+            # validate + normalize
+            token_data = val.new_account_via_email.validate(token)
+            #token_data = _get_email_registration_data(token)
         else:
             token_data = None
     except:
@@ -170,31 +168,23 @@ def post_account(data):
     if not token_data:
         json_abort(400, {'error': 'Invalid token'})
 
-    def _rv(account_id): 
-        #TODO get curies from config     
-        rv = hal()
-        rv._l('location', url_for('api.get_account', account_id=account_id))
-        rv._l('simpleb2b:access_key', url_for('api.get_access_key'))
-        return rv.document
-
-    #app.logger.info(db.session.connection())
     try:
         # create account, account_email and access_key
         account = create_account_from_token(token_data)
-        return _rv(account.account_id), 201, []
     except sql_exc.IntegrityError as e:
-        raise
-        email = AccountEmail.query.filter_by(
-            email=token_data.get('email')).first()
-        doc =  _rv(email.account_id)
-        doc['error'] = 'Email already registered.'
-        return doc, 409, []
+        json_abort(409, {'error': 'Account already exists'})
+
+    rv = hal()
+    rv._l('location', url_for('api.get_account', account_id=account_id))
+    rv._l('productlist:access_token', url_for('api.post_access_token'))
+    return rv.document, 201, []
 
 
 def _get_email_registration_data(data):
     try:
         return {
             'email': data['email'],
+            'password': data.get('password') or None, 
             'first_name': data.get('first_name'),
             'last_name': data.get('last_name'),
             'email_verified': False,
@@ -206,7 +196,7 @@ def _get_email_registration_data(data):
 
 def _verify_email_token(data):
     try:
-        data = json.loads(parse.unquote(data))
+        #data = json.loads(parse.unquote(data))
         signin_id, passcode = data['signin_id'], data['passcode']
     except:
         json_abort(400, {'error': 'Invalid token'})
@@ -219,12 +209,11 @@ def _verify_email_token(data):
         ).one()
     except orm_exc.NoResultFound as e:
         # if not found raise 404
-        json_abort(404, {'error': 'Passcode not found'})
+        json_abort(401, {'error': 'Not authorized'})
 
     # if Signin found, login is successful, delete Signin
     db.session.delete(s)
     return {'email': s.email}
-
 
 def _verify_google_token(token):
     ggauth = GAuth(
@@ -243,39 +232,46 @@ def _verify_auth_token(data):
     if not provider:
         json_abort(400, {'error': 'Missing authentication provider'})
 
-    if provider.lower()=='google':
-        app.logger.info(token)
+    if not isinstance(provider,str):
+        pass
+    elif provider.lower()=='google':
         return _verify_google_token(token)
+    elif provider.lower()=='productlist':
+        try: 
+            return _verify_password_token(token)
+        except KeyError:
+            return _verify_email_token(token)
 
-    elif provider.lower()=='simpleb2b':
-        return _verify_email_token(token)
-    else:
-        json_abort(400, {'error': 'Unrecognized authentication provider'})
+    json_abort(401, {'error': 'Not authorized'})
 
 
-def create_account_from_token(profile):
-    account = Account(**{
-        'first_name': profile.get('given_name') or profile.get('first_name'),
-        'last_name': profile.get('family_name') or profile.get('last_name'),
-        'email': profile['email'],
-        'confirmed': profile.get('email_verified', False),
-        'lang': profile.get('locale', None) or profile.get('lang', 'en'),
-    })
+def create_account_from_token(data):
+    # validated fields:
+    # first_name, given_name, last_name, family_name, email, email_verified,
+    # lang, locale, password
+    #data['first_name'] = data.pop('given_name') or data['first_name']
+    #data['last_name'] = data.pop('family_name') or data['last_name']
+    #data['lang'] = data.pop('locale') or data['lang']
+    #data['confirmed'] = data.pop('
+    
+    account = Account(**data)
+
+    #account.password = data['password']
 
     email = AccountEmail(**{
         'email': account.email,
         # email is marked as verified only if the token says so
-        'verified': profile.get('email_verified', False),
+        'verified': data['confirmed'],
         'primary': True,
         # enable login attempts with this email in the future
         'login': True, 
     })
 
-    access_key = AccountAccessKey(**{
-        'key': generate_key(24),
-    })
+    #access_key = AccountAccessKey(**{
+    #    'key': generate_key(24),
+    #})
 
-    account.access_key = access_key
+    #account.access_key = access_key
     email.account = account
 
     try:
@@ -384,7 +380,6 @@ def _get_account_resource(account, lang, partial=False):
 def put_account(account_id, data, lang):
     #TODO: data validation
     data = val.edit_account.validate(data)
-    app.logger.info(data)
     a = _get_account(account_id)
     data['data'] = localize_data(
         data.get('data', {}), fields=Account.localized_fields, lang=lang)

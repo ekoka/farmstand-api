@@ -1,7 +1,9 @@
 from . import db
 from uuid import uuid4
 import bcrypt
+from sqlalchemy.ext.hybrid import hybrid_property
 from datetime import datetime as dtm
+from b2bapi.utils.password import match_passwords, encrypt_password
 
 """
 - Each user has a single account.
@@ -13,6 +15,7 @@ class Account(db.Model):
     first_name = db.Column(db.Unicode)
     last_name = db.Column(db.Unicode)
     email = db.Column(db.Unicode, unique=True)
+    _password = db.Column('password', db.Unicode)
     lang = db.Column(db.Unicode, default='en')
     data = db.Column(db.JSONB, default=dict)
     confirmed = db.Column(db.Boolean, default=False)
@@ -20,6 +23,21 @@ class Account(db.Model):
     # these fields should be localized in the `data` json 
     localized_fields = ['company', 'role', 'summary', 'address', 'city',
                         'state_province', 'country']
+
+    @hybrid_property
+    def password(self):
+        return self._password
+
+    @password.setter
+    def password(self, password):
+        self._password = encrypt_password(password)
+
+    def authenticate(self, password):
+        # password must be an unicode object
+        try:
+            return match_passwords(self.password, password)
+        except AttributeError:
+            return False
 
 
 class PaymentSource(db.Model):
@@ -31,19 +49,20 @@ class PaymentSource(db.Model):
 
     account = db.relationship(Account, backref='payment_sources')
 
+
 class AccountAccessKey(db.Model):
     __tablename__ = 'account_access_keys'
 
     key = db.Column(db.Unicode, primary_key=True)
-    account_id = db.Column(
-        None, db.ForeignKey('accounts.account_id'), unique=True,
-        nullable=False)
+    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
     secret = db.Column(db.Unicode)
+    creation_timestamp = db.Column(db.DateTime, default=dtm.utcnow)
     fail_count = db.Column(db.Integer, default=0)
     fail_timestamp = db.Column(db.DateTime)
 
     account = db.relationship(
         'Account', backref=db.backref('access_key', uselist=False))
+
 
 """
 - An account can have multiple alternate emails.

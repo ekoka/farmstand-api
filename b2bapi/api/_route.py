@@ -3,6 +3,7 @@ import requests
 from flask import g, request, url_for, current_app as app, jsonify, abort
 from werkzeug import exceptions as werk_exc, Response
 from werkzeug.datastructures import MultiDict
+import re 
 
 from . import blueprint as bp
 from b2bapi.db import db
@@ -11,13 +12,8 @@ from b2bapi.utils.cachelib import json_response
 from b2bapi.utils import abc as uls_abc
 from b2bapi.utils.hal import Resource as Hal
 
-proxy_auth_provider = 'simpleauth'
-# namespace
-proxy_auth_ns = 'simpleauth'
-proxy_auth_url = 'http://simpleauth.local:9898'
-
 def hal():
-    return Hal()._c('simpleb2b', 'https://api.simpleb2b.io/doc/{rel}')
+    return Hal()._c('productlist', 'https://api.productlist.io/doc/{rel}')
 
 # setting domain name in urls that expects it during `url_for()`
 @bp.url_defaults
@@ -67,14 +63,28 @@ def crossorigin(fnc):
     return wrapper
 
 def corsify(response):
-    response.headers['Access-Control-Allow-Origin']='*'
+
+    allowed_origin_filter = re.compile(app.config['ALLOWED_ORIGINS_REGEX'])
+    default_origin = app.config['SERVER_DOMAIN'].strip('/')
+    request_origin = request.headers.get('origin', default_origin)
+
+    allow_origin_match = allowed_origin_filter.match(request_origin)
+
+    if allow_origin_match:
+        allow_origin = allow_origin_match.group()
+    else:
+        allow_origin = default_origin
+
+    response.headers['Access-Control-Allow-Origin'] = allow_origin
+
     response.headers[
         'Access-Control-Allow-Methods']='GET, POST, PUT, DELETE, PATCH, OPTIONS'
     response.headers[
         'Access-Control-Allow-Headers']=(
             'Authorization, Content-Type, Cache-Control, X-Requested-With, '
-            'Location, access-key, Access-Token ')
+            'Location, access-token, Access-Token, Origin')
     response.headers['Access-Control-Expose-Headers'] = 'Location'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 @bp.errorhandler(400) # see CATCHALL ROUTE next to this
@@ -186,22 +196,41 @@ def lang_injector(fnc):
         return fnc(*a, lang=lang, **kw)
     return wrapper
 
-def http_access_key_authentication():
-    token = get_access_token()
-    if not token:
+def access_token_authentication():
+    key = get_access_token_from_header()
+    #key = get_access_token_from_cookie()
+    if not key:
         return
-    #json_expr = {'access_token': token}
-    #acc = Account.query.filter(
-    #    Account.meta.comparator.contains(json_expr)).first()
     try:
-        access_key = AAccessKey.query.filter(AAccessKey.key==token).one()
+        access_key = AAccessKey.query.filter(AAccessKey.key==key).one()
     except Exception as e:
         return
     if access_key:
+        g.access_key = access_key
         g.current_account = access_key.account
         return True
 
-def get_access_token():
+def access_token_cookie_setter(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        response = fnc(*a, **kw)
+        try:
+            # a view that expects an access_token to be set must place it in g 
+            response.set_cookie(
+                token='access_token',
+                value=g.access_token,
+                httponly=True,
+                secure=app.config.get('SESSION_COOKIE_SECURE', False),
+                domain=app.config.get('SERVER_DOMAIN', None),
+            )
+        except AttributeError:
+            raise AttributeError(
+                'View function must set access_token on `flask.g`')
+        return response
+    return wrapper
+
+
+def get_csrf_token(fnc):
     access_token_schemes = ['access-token', 'accesstoken', 'access_token']
     try:
         scheme, credentials = request.headers['Authorization'].split(' ')
@@ -211,12 +240,30 @@ def get_access_token():
     except (ValueError, AttributeError, KeyError):
         pass
 
+def get_access_token_from_header():
+    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
+    try:
+        scheme, credentials = request.headers['Authorization'].split(' ')
+        if scheme.lower() in access_token_schemes:
+            return  credentials
+        return request.args['access_token']
+    except (ValueError, AttributeError, KeyError):
+        pass
+
+def get_access_token_from_cookie():
+    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
+    try:
+        access_token = next(v for k,v in request.cookies.items() 
+                          if k in access_token_schemes)
+        return access_token
+    except StopIteration: 
+        pass
 
 def authentication(fnc):
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
         try:
-            authenticated = http_access_key_authentication()
+            authenticated = access_token_authentication()
             #if not authenticated:
             #    authenticated = proxy_authentication()
         except (KeyError, AttributeError, ValueError) as e:
@@ -315,6 +362,13 @@ def auth_injector(fnc):
         return fnc(*a, **kw)
     return wrapper
 
+def access_token_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        kw['access_token'] = g.access_token
+        return fnc(*a, **kw)
+    return wrapper 
+
 def passthrough_view(fnc, passthrough_url):
     url = passthrough_url
     # replaces view function
@@ -362,11 +416,12 @@ def json_response_wrapper(fnc):
 
 def route(
     url_pattern, methods=None, domained=True, expects_data=False, 
-    expects_params=False, expects_files=False, authenticate=False, 
+    expects_params=False, expects_files=False, authenticate=False,
     authorize=None, expects_lang=False, expects_account=False,
     expects_role=False, expects_domain=False, expects_auth=False,
     passthrough=None, cacheable=False, if_match=False, if_none_match=False,
-    endpoint=None, readonly=False, **kw):
+    endpoint=None, readonly=False, set_cookie_token=False, 
+    expects_access_token=False,  **kw):
     """ function to map  route to function """
 
     if methods is None: methods = ['GET',]
@@ -454,6 +509,11 @@ def route(
             _authenticate = True
             fnc = auth_injector(fnc)
 
+        if expects_access_token:
+            # cannot pass token without authentication
+            _authenticate = True
+            fnc = access_token_injector(fnc)
+
         if authorize:
             # cannot have authz without authn
             _authenticate = True
@@ -464,6 +524,10 @@ def route(
 
 
         fnc = json_response_wrapper(fnc)
+
+        # access_token
+        if set_cookie_token:
+            fnc = access_token_cookie_setter(fnc)
 
         # crossorigin
         fnc = crossorigin(fnc)

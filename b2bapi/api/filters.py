@@ -327,8 +327,8 @@ def put_filter_option_products(filter_id, filter_option_id, domain, data):
 #     rv._l('find', url_for(
 #         'api.get_filter_set', filter_set_id='{filter_set_id}'), unquote=True,
 #         templated=True)
-#     # rv._l('simpleb2b:filters', url_for('api.post_filters'))
-#     rv._l('simpleb2b:filter', url_for(
+#     # rv._l('productlist:filters', url_for('api.post_filters'))
+#     rv._l('productlist:filter', url_for(
 #         'api.get_filter', filter_id='{filter_id}'), unquote=True,
 #         templated=True)
 # 
@@ -342,7 +342,7 @@ def put_filter_option_products(filter_id, filter_option_id, domain, data):
 #     rv = hal()
 #     rv._l('self', url_for(
 #         'api.get_filter_set', filter_set_id=fs.filter_set_id))
-#     #rv._l('simpleb2b:filters', url_for(
+#     #rv._l('productlist:filters', url_for(
 #     #    'api.post_filter', filter_set_id=fs.filter_set_id))
 #     rv._k('filter_set_id', fs.filter_set_id)
 #     rv._k('label', fs.data.setdefault('label', {'en':None}).get('en'))
@@ -400,7 +400,7 @@ def put_filter_option_products(filter_id, filter_option_id, domain, data):
 #     else:
 #         rv._k('level', f.level)
 #         rv._embed('filter_set', _get_filter_set_resource(f.filter_set, partial=True))
-#         rv._l('simpleb2b:products', url_for('api.get_products', filter=f.filter_id))
+#         rv._l('productlist:products', url_for('api.get_products', filter=f.filter_id))
 #     return rv.document
 # 
 # @route('/filters/<filter_id>', expects_domain=True)

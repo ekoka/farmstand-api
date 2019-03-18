@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime as dtm
 
 from b2bapi.db.models.accounts import Account, AccountAccessKey
-from b2bapi.db.models.billing import Plan, Billable, BillablePeriod
+from b2bapi.db.models.billing import Plan, Billable
 
 @pytest.fixture(scope='session')
 def provider(): 
@@ -44,11 +44,8 @@ def account_data(provider, account_email):
 def pricing_plans():
     return [
         {
-            'plan_id': 1,
-            'name': 'brochure',
+            'plan_id': 'small',
             'plan_type': 'domains',
-            'cycle': 'monthly',
-            'price': 5900,
             'data': {
                 'label': {
                     'en': 'Limited brochure',
@@ -57,11 +54,8 @@ def pricing_plans():
             },
         },
         {
-            'plan_id': 2,
-            'name': 'portfolio',
+            'plan_id': 'medium',
             'plan_type': 'domains',
-            'cycle': 'monthly',
-            'price': 9900,
             'data': {
                 'label': {
                     'en': 'Portfolio',
@@ -76,7 +70,7 @@ def domain_data(pricing_plans):
     return [{
         'name': 'lmc',
         # with plan_name
-        'plan_name': pricing_plans[-1]['name'],
+        'plan_id': pricing_plans[-1]['plan_id'],
         #'creation_date': '2019-01-17',
         'data': {
             'label': 'Lao Mountain Coffee',
@@ -91,37 +85,6 @@ def domain_data(pricing_plans):
         }
     }]
 
-@pytest.fixture(scope='session')
-def period_data():
-    return [
-        # 2018-12
-        {
-            'start_timestamp': dtm(2018, 12, 3),
-            'end_timestamp': dtm(2018, 12, 15),
-            'current': False,
-        },
-        {
-            'start_timestamp': dtm(2018, 12, 17),
-            'end_timestamp': dtm(2018, 12, 27),
-            'current': False,
-        },
-        # 2019-1
-        {
-            'start_timestamp': dtm(2019, 1, 2),
-            'end_timestamp': dtm(2019, 1, 11),
-            'current': False,
-        },
-        {
-            'start_timestamp': dtm(2019, 1, 15),
-            'end_timestamp': dtm(2019, 1, 20),
-            'current': False,
-        },
-        {
-            'start_timestamp': dtm(2019, 1, 25),
-            'end_timestamp': dtm(2019, 1, 31),
-            'current': False,
-        },
-    ]
 
 @pytest.fixture(scope='session')
 def signin_data(account_data):
@@ -266,36 +229,14 @@ def load_domains(load_signins, load_pricing, db_load_table):
     return load
 
 @pytest.fixture(scope='session')
-def dump_periods(load_domains, db_dump_table, period_data):
+def load_common_words(db_load_table):
     """
-    Depends:    [accounts, account_access_keys, account_emails, signins, plans,
-                 billable_periods]
-    Dumps:      [billable_periods]
+    Depends:    []
+    Loads:      [common_words]
     """
-    def dump(session):
-        connection = session.connection()
-        load_domains(connection)
-        for b in session.query(Billable): # same periods each billable, easier to test
-            for p_data in period_data:
-                period = BillablePeriod(**p_data)
-                b.periods.append(period)
-        session.commit()
-        db_dump_table(session.connection(), 'billable_periods')
-
-    return dump
-
-@pytest.fixture(scope='session')
-def load_periods(load_domains):
-    """
-    Depends:    [accounts, account_access_keys, account_emails, signins, plans, 
-                 billable_periods]
-    Loads:      []
-    """
-    def load(connection):
-        # load_domains actually already loads billable_periods
-        load_domains(connection)
+    def load(connection): 
+        db_load_table(connection, table='common_words')
     return load
-
 
 __all__ = [
     'provider',
@@ -314,7 +255,5 @@ __all__ = [
     'dump_domains',
     'load_domains',
     'account_email',
-    'period_data',
-    'dump_periods',
-    'load_periods',
+    'load_common_words',
 ]

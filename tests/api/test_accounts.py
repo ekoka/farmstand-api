@@ -26,7 +26,7 @@ def test_dump_accounts(dump_accounts, nested_session):
     connection = nested_session.connection()
     dump_accounts(connection)
 
-def test_can_create_signin(load_accounts, nested_session, api_client, logger):
+def test_can_create_signin(load_accounts, nested_session, api_client):
     # preload db with accounts fixture
     load_accounts(nested_session.connection())
     data = {'email': 'verysimple@gmail.com'}
@@ -63,7 +63,7 @@ def logins(provider, json):
     return fnc
 
 def test_can_get_access_key_from_passcode_login(
-    api_client, logins, load_signins, nested_session, logger, jsloads):
+    api_client, logins, load_signins, nested_session, jsloads):
     load_signins(nested_session.connection())
     login_params = logins(nested_session)
     response = api_client.get('/api/v1/access-key', query_string=login_params[0])

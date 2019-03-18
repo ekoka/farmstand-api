@@ -1,4 +1,5 @@
 from . import db
+from datetime import datetime as dtm
 
 class Domain(db.Billable):
     __tablename__ = 'domains'
@@ -6,9 +7,9 @@ class Domain(db.Billable):
     domain_id = db.Column(None, db.ForeignKey('billables.billable_id'),
                           primary_key=True)
     name = db.Column(db.Unicode, unique=True)
-    company_name = db.Column(db.Unicode)
-    creation_date = db.Column(db.DateTime)
-    data = db.Column(db.JSONB)
+    creation_date = db.Column(db.DateTime, default=dtm.utcnow)
+    data = db.Column(db.JSONB, default=dict)
+    meta = db.Column(db.JSONB, default=dict)
 
     localized_fields = ['label', 'description']
 

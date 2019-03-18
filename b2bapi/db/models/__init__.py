@@ -52,4 +52,5 @@ from . import (
     #inquiries,
     quotations,
     meta,
+    security,
 )
