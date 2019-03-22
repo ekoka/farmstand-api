@@ -1,6 +1,7 @@
 import uuid
 import simplejson as json
 import copy
+from datetime import datetime as dtm
 
 from flask import redirect, g, current_app as app, url_for
 from sqlalchemy.orm import exc as orm_exc
@@ -38,7 +39,7 @@ from .validation.products import (add_product, edit_product, edit_product_member
 #    }
 #    return rv, 200, []
 
-def _products_query(domain, **params):
+def _products_query(domain_id, **params):
     q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
     q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
     return q
@@ -46,8 +47,7 @@ def _products_query(domain, **params):
 @route('/products', expects_params=True, expects_domain=True,
        authenticate=True, expects_lang=True, readonly=True)
 def get_products(params, domain, lang):
-    domain_id = domain.domain_id
-    products = _products_query(domain=domain).all()
+    products = _products_query(domain_id=domain.domain_id).all()
     product_url = url_for('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', url_for('api.get_products', **params))
@@ -382,6 +382,7 @@ def post_product(data, lang):
 def put_product(product_id, data, domain, lang):
     data = edit_product.validate(data)
     p = _get_product(product_id, domain.domain_id)
+    p.updated_ts = dtm.utcnow()
     populate_product(p, data, lang)
 
 

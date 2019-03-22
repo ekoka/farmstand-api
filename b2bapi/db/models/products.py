@@ -1,6 +1,6 @@
 from . import db
 from uuid import uuid4
-from datetime.datetime import dtm
+from datetime import datetime as dtm
 
 from sqlalchemy.orm.collections import attribute_mapped_collection
 from sqlalchemy.sql.expression import case, ClauseElement
