@@ -38,11 +38,16 @@ from .validation.products import (add_product, edit_product, edit_product_member
 #    }
 #    return rv, 200, []
 
+def _products_query(domain, **params):
+    q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
+    q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
+    return q
+
 @route('/products', expects_params=True, expects_domain=True,
        authenticate=True, expects_lang=True, readonly=True)
 def get_products(params, domain, lang):
     domain_id = domain.domain_id
-    products = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
+    products = _products_query(domain=domain).all()
     product_url = url_for('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', url_for('api.get_products', **params))
