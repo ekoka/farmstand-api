@@ -327,9 +327,11 @@ def domain_injector(fnc):
 
 def dbsession_rollback(fnc):
     """
-    rolls back all changes during the session
+    commit changes before the view.
+    rolls back all changes during the view.
     """
     def wrapper(*a, **kw):
+        db.session.commit()
         rv = fnc(*a,**kw)
         db.session.rollback()
         return rv

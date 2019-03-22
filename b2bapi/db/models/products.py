@@ -1,5 +1,7 @@
 from . import db
 from uuid import uuid4
+from datetime.datetime import dtm
+
 from sqlalchemy.orm.collections import attribute_mapped_collection
 from sqlalchemy.sql.expression import case, ClauseElement
 from sqlalchemy.ext.compiler import compiles
@@ -46,7 +48,10 @@ class Product(db.Model, db.DomainMixin):
     product_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     visible = db.Column(db.Boolean, default=False)
     # TODO: fields to add:  
-    #    logs: date_added, date_updated, updated_by
+    #    logs: updated_by
+    created_ts = db.Column(db.DateTime, default=dtm.utcnow, nullable=False)
+    updated_ts = db.Column(db.DateTime, default=dtm.utcnow, nullable=False)
+    priority = db.Column(db.Integer, default=10)
     data = db.Column(db.JSONB, default=dict)
     """
     {

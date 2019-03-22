@@ -21,6 +21,7 @@ def get_root():
     rv._l('productlist:signins', url_for('api.post_signin'))
     rv._l('productlist:accounts', url_for('api.post_account'))
     #rv._l('productlist:account', '/api/v1/accounts/{account_id}', templated=True)
+    rv._l('productlist:profile', url_for('api.get_profile'))
     rv._l('productlist:account', url_for(
         'api.get_account', account_id='{account_id}'), templated=True,
         unquote=True)

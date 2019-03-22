@@ -131,6 +131,25 @@ def post_access_token(data):
     return rv.document, 200, []
 
 
+@route('/profile', methods=['GET'], domained=False, authenticate=True, 
+       expects_account=True)
+def get_profile(account):
+    """
+    The difference between this resource and `account` is that this
+    one returns the authenticated user's profile, whereas `account` returns
+    the matched the account info that matches the url's `account_id`. 
+    That means that this resource can effectively only be retrieved by the
+    account's owner and its full url can be published as part of the `Root`
+    resource.
+    """
+    rv = hal()
+    rv._l('self', url_for('api.get_profile'))
+    rv._l('productlist:account', url_for(
+        'api.get_account', account_id=account.account_id))
+    rv._k('account_id', account.account_id)
+    return rv.document, 200, []
+
+
 @route('/access-token', methods=['DELETE'], domained=False, authenticate=True,
        expects_access_token=True)
 def delete_access_token(access_token):

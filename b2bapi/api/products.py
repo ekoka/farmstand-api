@@ -50,6 +50,22 @@ def get_products(params, domain, lang):
     rv._k('product_ids', [p.product_id for p in products])
     return rv.document, 200, []
 
+@route('/product-resources', expects_params=True, expects_lang=True,
+       expects_domain=True, authenticate=True, readonly=True)
+def get_product_resources(params, domain, lang):
+    product_ids = params.getlist('pid', None)
+    q = Product.query.filter_by(domain_id=domain.domain_id)
+
+    if product_ids:
+        q = q.filter(Product.product_id.in_(product_ids))
+    products = q.all()
+
+    rv = hal()
+    rv._l('self', url_for('api.get_product_resources'))
+    rv._k('product_ids', [p.product_id for p in products])
+    rv._embed('products', [_get_product_resource(p, lang) for p in products])
+    return rv.document, 200, []
+
 def _product_summary(p, lang):
     return {
         'self': url_for('api.get_product_summary', product_id=p.product_id),
@@ -189,15 +205,15 @@ def get_product(product_id, domain, params, lang):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
     product = _get_product(product_id, domain.domain_id)
-    document = _get_product_resource(product, lang, partial=partial)
+    document = _get_product_resource(product, lang)
     return document, 200, []
 
-def _get_product_resource(p, lang, partial=True):
+def _get_product_resource(p, lang):
     rv = hal()
-    rv._l('self', url_for('api.get_product', product_id=p.product_id,
-                          partial=partial))
+    rv._l('self', url_for('api.get_product', product_id=p.product_id))
     rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
     rv._l('filters', url_for('api.put_product_filters', product_id=p.product_id))
+
     rv._k('product_id', p.product_id.hex)
     rv._k('visible', p.visible)
 
@@ -208,25 +224,14 @@ def _get_product_resource(p, lang, partial=True):
         for i in p.images
     ])
 
-    if partial:
-        # we set the `partial` flag on partial representations. HAL allows
-        # for some inconsistencies between representations of the same 
-        # resource. 
-        rv._k('partial', partial)
-
-        # we only get the first 3 fields if it's a partial product resource
-        # we're fetching
-        fields = [_localized_product_field(f, lang)
-                        for f in p.data.setdefault('fields', [])[:3]]
-    else:
-        # we get all fields for a non-partial representation
-        fields = [_localized_product_field(f, lang) 
-                         for f in p.data.setdefault('fields', [])]
-        # NOTE: maybe we'll add this at some point
-        #rv._k('unit_price', p.data.get('unit_price'))
-        #rv._k('quantity_unit', p.data.get('quantity_unit'))
-        # TODO:
-        #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
+    # we get all fields for a non-partial representation
+    fields = [_localized_product_field(f, lang) 
+                        for f in p.data.setdefault('fields', [])]
+    # NOTE: maybe we'll add this at some point
+    #rv._k('unit_price', p.data.get('unit_price'))
+    #rv._k('quantity_unit', p.data.get('quantity_unit'))
+    # TODO:
+    #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
 
     rv._k('data', {'fields': fields})
     return rv.document
@@ -420,7 +425,7 @@ def get_product_details(domain, lang, params):
         Product.product_id.in_(product_ids),
         Product.domain_id==domain.domain_id,
     ).all()
-    rv._embed('products', [_get_product_resource(p, lang, partial=True)
+    rv._embed('products', [_get_product_resource(p, lang)
                            for p in products])
     return rv.document, 200, []
 
