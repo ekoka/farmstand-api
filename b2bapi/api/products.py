@@ -223,6 +223,8 @@ def _get_product_resource(p, lang):
     rv._k('visible', p.visible)
 
     rv._k('filters', _get_product_filters(p))
+    rv._k('priority', p.priority)
+    rv._k('last_update', p.updated_ts)
 
     rv._k('images', [img_aspect_ratios(
         i.image, aspect_ratios=['1:1'], sizes=['thumb', 'medium'])
