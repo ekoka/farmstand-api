@@ -15,29 +15,17 @@ from b2bapi.db.models.filters import FilterOption
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.schema import generic as product_schema
 from ._route import route, json_abort, hal
-from .product_utils import (
-    _localize_fields, _localized_product_field, patch_record, Mismatch
-)
+from .product_utils import patch_record, Mismatch
+
+def _delocalize_product_field(field, lang):
+    rv = dict(**field)
+    if field.get('field_type') in Field.text_types:
+        rv['value'] = rv.setdefault('value', {}).get(lang)
+    return rv
+
 from .images import img_aspect_ratios
 
 from .validation.products import (add_product, edit_product, edit_product_members)
-
-#@route('/products', methods=['GET'], expects_params=True, expects_lang=True)
-#def get_products(params, lang):
-#    max_id = None
-#    min_id = None
-#    domain_id = g.domain['domain_id']
-#    q = Product.query.filter_by(domain_id=domain_id)
-#    if params.get('filters'): 
-#        filters = json.loads(params['filters'])
-#        q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
-#    #_p_order = lambda p: p.data['fields_order'][0]
-#    products = q.all()
-#    rv = {
-#        'self': url_for('api.get_products',**params),
-#        'products': [_product_summary(p, lang) for p in products],
-#    }
-#    return rv, 200, []
 
 def _products_query(domain_id, **params):
     q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
@@ -70,77 +58,6 @@ def get_product_resources(params, domain, lang):
     rv._k('product_ids', [p.product_id for p in products])
     rv._embed('products', [_get_product_resource(p, lang) for p in products])
     return rv.document, 200, []
-
-def _product_summary(p, lang):
-    return {
-        'self': url_for('api.get_product_summary', product_id=p.product_id),
-        'product_id': p.product_id.hex,
-        #'caption': _caption(p.data, lang),
-        'captionable_fields': _caption_fields(p.data['fields'], lang),
-        'url': url_for('api.get_product', product_id=p.product_id),
-    } 
-
-def _caption_fields(fields, lang):
-    rv = []
-    for f in fields:
-        if f.get('field_type')=='SHORT_TEXT' and f.get('value', {}).get(lang):
-            rv.append({'value': f['value'][lang], 'captionable': f.get('captionable')})
-    return rv
-
-def _caption(data, lang):
-    ''' caption is made of either:
-        1- all the fields that have the `captionable` flag
-        2- the field with hte `caption` name
-        3- the first SHORT_TEXT field
-    '''
-    rv = ''
-    try:
-        captionable = []
-        named_caption = None
-        short_text_caption = None
-        for f in data['fields']:
-            # only SHORT_TEXT can be part of caption
-            if f['field_type']!='SHORT_TEXT':
-                continue
-            if not short_text_caption:
-                short_text_caption = f['value'][lang]
-            if not named_caption and f.get('name')=='caption':
-                named_caption = f['value'][lang]
-            if f.get('captionable') and f['value'][lang]:
-                captionable.append(f['value'][lang])
-        # TODO: put the separator in a config
-        caption = '-'.join(captionable) or named_caption or short_text_caption
-        return caption or ''
-    except:
-        return ''
-
-
-
-
-# TODO: temporarily hardwired 
-#@route('/product-templates/<product_type_id>', methods=['GET'])
-#def get_product_template(product_type_id):
-#    domain_id = g.domain['domain_id']
-#    product_type = ProductType.query.filter_by(
-#        product_type_id=product_type_id, domain_id=domain_id).one()
-#    product = {
-#        'product_id': uuid.uuid4().hex,
-#    }
-#    # if ProductType object has schema load it
-#    if product_type.schema:
-#        # we get all fields for this product type
-#        product_fields = product_type.schema.get('fields', [])
-#        # load all field schemas
-#        field_metas = load_field_metas([f['name'] for f in product_fields])
-#        # init product fields with info found in field schema
-#        product['fields'] = [field_metas[pf['name']].init_schema(pf) 
-#                             for pf in product_fields]
-#    rv = {
-#        'self': url_for(
-#            'api.get_product_template', product_type_id=product_type_id),
-#        'template': product,
-#    }
-#    return rv, 200, []
 
 
 def _localized_field_schema(field, lang):
@@ -186,26 +103,8 @@ def _get_product(product_id, domain_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
-@route('/product-summary/<product_id>', expects_lang=True)
-def get_product_summary(product_id, lang):
-    record = _get_product(product_id)
-    rv  = _product_summary(record, lang)
-    return rv, 200, []
-
-#@route('/products/<product_id>', expects_lang=True)
-#def get_product(product_id, lang):
-#    product = _get_product(product_id)
-#    rv = {
-#        'self': url_for('api.get_product', product_id=product_id),
-#        'summary_url': url_for('api.get_product_summary', product_id=product_id),
-#        #'caption': _caption(product, lang),
-#        'product_id': product_id,
-#        'fields': _fields(product.data.get('fields', []), lang),
-#    }
-#    return rv, 200, []
-
 @route('/products/<product_id>', authenticate=True, expects_domain=True,
-       expects_params=True, expects_lang=True, readonly=True)
+       expects_params=True, expects_lang=True)
 def get_product(product_id, domain, params, lang):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
@@ -220,7 +119,7 @@ def _get_product_resource(p, lang):
     rv._l('filters', url_for('api.put_product_filters', product_id=p.product_id))
 
     rv._k('product_id', p.product_id.hex)
-    rv._k('visible', p.visible)
+    #rv._k('visible', p.visible)
 
     rv._k('filters', _get_product_filters(p))
     rv._k('priority', p.priority)
@@ -231,16 +130,15 @@ def _get_product_resource(p, lang):
         for i in p.images
     ])
 
-    # we get all fields for a non-partial representation
-    fields = [_localized_product_field(f, lang) 
-                        for f in p.data.setdefault('fields', [])]
+    rv._k('fields', [_delocalize_product_field(f, lang) 
+                     for f in p.fields.setdefault('fields', [])])
+
     # NOTE: maybe we'll add this at some point
     #rv._k('unit_price', p.data.get('unit_price'))
     #rv._k('quantity_unit', p.data.get('quantity_unit'))
     # TODO:
     #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
 
-    rv._k('data', {'fields': fields})
     return rv.document
 
 def _get_product_filters(p):
@@ -297,59 +195,36 @@ def hydrate_field(product_field, field):
         #'properties': field.schema if field else None,
     }
 
-
-
 def populate_product(product, data, lang):
     for k,v in data.items():
-        if k=='data':
-            for data_key, data_value in v.items():
-                if data_key=='fields':
-                    # we merge fields data
-                    _merge_fields(product.data, data_value, lang)
-                else:
-                    # we simply overwrite other data
-                    product.data[data_key] = data_value
+        if k=='fields':
+            _merge_fields(product.fields, v, lang)
         else:
             setattr(product,k,v)
 
-# TODO: we'll eventually have to revert to this version or something close,
-# that is aware of Field schema stored in the database.
-#def _merge_fields(productdata, datafields, lang):
-#    field_types = {f.name: f.field_type for f in Field.query.all()}
-#    for df in datafields:
-#        field_type = field_types.get(df.get('name'))
-#        if field_type in Field.text_types:
-#            df['value'], value = {}, df.get('value') # uploaded value
-#            #if product.data and product.data.fields:
-#            for pf in productdata['fields']:
-#                if pf.get('name')==df['name']:
-#                    df['value'] = pf.get('value', {}) # localized values
-#            df['value'][lang] = value # merge localized and uploaded value 
-#    productdata['fields'] = datafields
 
-
-def _merge_fields(productdata, datafields, lang):
+def _merge_fields(productfields, fields, lang):
     # loop through the uploaded fields
-    for df in datafields:
+    for f in fields:
         # if field is a text type
-        if df['field_type'] in Field.text_types:
+        if f['field_type'] in Field.text_types:
             # extract the uploaded value and reset the field value
             # to an empty dict, ready to take localized values
-            df['value'], value = {}, df.get('value')
+            f['value'], value = {}, f.get('value')
 
             # now we search if the product already has an existing field with
             # the same name
-            for pf in productdata['fields']:
+            for pf in productfields['fields']:
                 # if we find a matching field we give its (localized) value
                 # to our just uploaded field's value
-                if pf.get('name')==df['name']:
-                    df['value'] = pf.get('value', {})
+                if pf.get('name')==f['name']:
+                    f['value'] = pf.get('value', {})
             # now whether the field was already present or not
             # we set the uploaded value as a localized value
-            df['value'][lang] = value
+            f['value'][lang] = value
 
     # we're now ready to replace the old fields with the new data set
-    productdata['fields'] = datafields
+    productfields['fields'] = fields
 
 
 def db_flush():
@@ -366,7 +241,7 @@ def post_product(data, lang):
         data = add_product.validate(data)
     except vno_err.ValidationErrorStack as e:
         json_abort(400, {'error': 'Invalid data ' + str(e)})
-    p = Product(data={'fields': []})
+    p = Product(fields={'fields': []})
     #record(**data)
     populate_product(p, data, lang)
     db.session.add(p)
@@ -386,25 +261,6 @@ def put_product(product_id, data, domain, lang):
     p = _get_product(product_id, domain.domain_id)
     p.updated_ts = dtm.utcnow()
     populate_product(p, data, lang)
-
-
-    #filters = data.pop('filters', [])
-    #data.pop('data', None)
-    #p.populate(**data)
-
-    #try:
-    #    for i,f in enumerate(fields):
-    #        try:
-    #            val = p.data.setdefault('fields', [])[i]
-    #            val['en'] = f
-    #        except IndexError:
-    #            val = {'en': f}
-    #            p.data.setdefault('fields', []).append(val)
-    #except:
-    #    json_abort(400, {'error':'Bad Format'})
-
-    #p.filters = Filter.query.filter(Filter.filter_id.in_(filters)).all()
-
     db_flush()
     return {}, 200, []
 
@@ -480,17 +336,25 @@ def update_filter_options(product_id, filters, domain_id):
         raise
         db.session.rollback()
 
+def _localize_product_fields(fields, lang):
+    for field in fields:
+        if 'value' not in field:
+            continue
+        if field.get('field_type') in Field.text_types:
+            field['value'] = {lang: field['value']}
+
 """
 For a data to be patched to the product, it must already be present. 
 """
 @route('/products/<product_id>', methods=['PATCH'], expects_data=True,
        expects_domain=True, expects_lang=True, authenticate=True)
 def patch_product(product_id, data, domain, lang):
+    #TODO: validation
     #data = edit_product_members.validate(data)
     p = _get_product(product_id, domain.domain_id)
 
     try:
-        _localize_fields(data, lang)
+        _localize_product_fields(data['fields'], lang)
     except (ValueError, AttributeError, TypeError):
         raise
         json_abort(400, {'error': 'Bad format'})
@@ -532,3 +396,124 @@ def filtered_query(q, filters):
     return q
 
 
+#@route('/products', methods=['GET'], expects_params=True, expects_lang=True)
+#def get_products(params, lang):
+#    max_id = None
+#    min_id = None
+#    domain_id = g.domain['domain_id']
+#    q = Product.query.filter_by(domain_id=domain_id)
+#    if params.get('filters'): 
+#        filters = json.loads(params['filters'])
+#        q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
+#    #_p_order = lambda p: p.data['fields_order'][0]
+#    products = q.all()
+#    rv = {
+#        'self': url_for('api.get_products',**params),
+#        'products': [_product_summary(p, lang) for p in products],
+#    }
+#    return rv, 200, []
+
+#def _product_summary(p, lang):
+#    return {
+#        'self': url_for('api.get_product_summary', product_id=p.product_id),
+#        'product_id': p.product_id.hex,
+#        #'caption': _caption(p.data, lang),
+#        'captionable_fields': _caption_fields(p.data['fields'], lang),
+#        'url': url_for('api.get_product', product_id=p.product_id),
+#    } 
+
+#def _caption_fields(fields, lang):
+#    rv = []
+#    for f in fields:
+#        if f.get('field_type')=='SHORT_TEXT' and f.get('value', {}).get(lang):
+#            rv.append({'value': f['value'][lang], 'captionable': f.get('captionable')})
+#    return rv
+
+#def _caption(data, lang):
+#    ''' caption is made of either:
+#        1- all the fields that have the `captionable` flag
+#        2- the field with the `caption` name
+#        3- the first SHORT_TEXT field
+#    '''
+#    rv = ''
+#    try:
+#        captionable = []
+#        named_caption = None
+#        short_text_caption = None
+#        for f in data['fields']:
+#            # only SHORT_TEXT can be part of caption
+#            if f['field_type']!='SHORT_TEXT':
+#                continue
+#            if not short_text_caption:
+#                short_text_caption = f['value'][lang]
+#            if not named_caption and f.get('name')=='caption':
+#                named_caption = f['value'][lang]
+#            if f.get('captionable') and f['value'][lang]:
+#                captionable.append(f['value'][lang])
+#        # TODO: put the separator in a config
+#        caption = '-'.join(captionable) or named_caption or short_text_caption
+#        return caption or ''
+#    except:
+#        return ''
+
+
+
+
+# TODO: temporarily hardwired 
+#@route('/product-templates/<product_type_id>', methods=['GET'])
+#def get_product_template(product_type_id):
+#    domain_id = g.domain['domain_id']
+#    product_type = ProductType.query.filter_by(
+#        product_type_id=product_type_id, domain_id=domain_id).one()
+#    product = {
+#        'product_id': uuid.uuid4().hex,
+#    }
+#    # if ProductType object has schema load it
+#    if product_type.schema:
+#        # we get all fields for this product type
+#        product_fields = product_type.schema.get('fields', [])
+#        # load all field schemas
+#        field_metas = load_field_metas([f['name'] for f in product_fields])
+#        # init product fields with info found in field schema
+#        product['fields'] = [field_metas[pf['name']].init_schema(pf) 
+#                             for pf in product_fields]
+#    rv = {
+#        'self': url_for(
+#            'api.get_product_template', product_type_id=product_type_id),
+#        'template': product,
+#    }
+#    return rv, 200, []
+
+#@route('/product-summary/<product_id>', expects_lang=True)
+#def get_product_summary(product_id, lang):
+#    record = _get_product(product_id)
+#    rv  = _product_summary(record, lang)
+#    return rv, 200, []
+
+#@route('/products/<product_id>', expects_lang=True)
+#def get_product(product_id, lang):
+#    product = _get_product(product_id)
+#    rv = {
+#        'self': url_for('api.get_product', product_id=product_id),
+#        'summary_url': url_for('api.get_product_summary', product_id=product_id),
+#        #'caption': _caption(product, lang),
+#        'product_id': product_id,
+#        'fields': _fields(product.data.get('fields', []), lang),
+#    }
+#    return rv, 200, []
+
+
+# TODO: we'll eventually have to revert to this version or something close,
+# that is aware of Field schema stored in the database.
+#def _merge_fields(productdata, datafields, lang):
+#    field_types = {f.name: f.field_type for f in Field.query.all()}
+#    for df in datafields:
+#        field_type = field_types.get(df.get('name'))
+#        if field_type in Field.text_types:
+#            df['value'], value = {}, df.get('value') # uploaded value
+#            #if product.data and product.data.fields:
+#            for pf in productdata['fields']:
+#                if pf.get('name')==df['name']:
+#                    df['value'] = pf.get('value', {}) # localized values
+#            df['value'][lang] = value # merge localized and uploaded value 
+#    productdata['fields'] = datafields

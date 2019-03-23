@@ -1,4 +1,5 @@
 from .available import schema as available
+from .visible import schema as visible
 from .categories import schema as categories
 from .description import schema as description
 from .dimensions import schema as dimensions

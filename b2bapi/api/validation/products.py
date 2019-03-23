@@ -33,16 +33,6 @@ field_arr = arr(
     allowempty,
 )
 
-#data_val = obj(
-#    arr(required(default=set_value([])), allowempty).apply_to('fields'),
-#    field_arr.apply_to('fields'),
-#).apply_to('data')
-
-data_val = obj(
-    arr().apply_to('fields')
-).apply_to('data')
-
-
 # TODO: add an extrafield blocker
 add_product = obj(
     prim(required(override=set_domain)).apply_to('domain_id'),
@@ -52,7 +42,7 @@ add_product = obj(
     # TODO make sure the product_family exists
     #prim(required(default=set_value(None))).apply_to('product_family_id'),
     # overriding the more permissive requirement statement on `fields`
-    obj(arr().apply_to('fields')).apply_to('data'),
+    field_arr.apply_to('fields')
 )
 
 # TODO: add an extrafield blocker
@@ -62,19 +52,17 @@ edit_product = obj(
     prim(~required, check_bool).apply_to('visible'),
     # TODO make sure the product_family exists
     #prim(~required).apply_to('product_family_id'),
-    obj(field_arr.apply_to('fields')).apply_to('data'),
+    #obj().apply_to('data'),
+    field_arr.apply_to('fields')
 )
 
 edit_product_members = obj(
     prim(~required).apply_to('visible'),
-    obj(
+    arr(
         ~required,
-        arr(
-            ~required,
-            obj(
-                prim(required).apply_to('name', 'value', 'field_type'),
-                prim(required(default=set_value(False)), check_bool).apply_to('display'),
-            ).apply_to(range(0,20))
-        ).apply_to('fields')
-    ).apply_to('data'),
+        obj(
+            prim(required).apply_to('name', 'value', 'field_type'),
+            prim(required(default=set_value(False)), check_bool).apply_to('display'),
+        ).apply_to(range(0,20))
+    ).apply_to('fields')
 )

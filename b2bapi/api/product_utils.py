@@ -67,24 +67,6 @@ from copy import deepcopy
 from b2bapi.db.models.meta import Field
 
 
-def _localized_product_field(field, lang):
-    rv = dict(**field)
-    if field.get('field_type') in Field.text_types:
-        rv['value'] = rv.setdefault('value', {}).get(lang)
-    return rv
-
-def _localize_fields(record, lang):
-    for field, value in record.items():
-        # only localizes fields in record.data
-        if field=='data':
-            for key, v in value.items():
-                if key=='fields':
-                    for field in v:
-                        if 'value' not in field:
-                            continue
-                        if field.get('field_type') in Field.text_types:
-                            field['value'] = {lang: field['value']}
-
 class Mismatch(Exception): 
     pass
 

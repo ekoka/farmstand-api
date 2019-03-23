@@ -52,7 +52,7 @@ class Product(db.Model, db.DomainMixin):
     created_ts = db.Column(db.DateTime, default=dtm.utcnow, nullable=False)
     updated_ts = db.Column(db.DateTime, default=dtm.utcnow, nullable=False)
     priority = db.Column(db.Integer, default=10)
-    data = db.Column(db.JSONB, default=dict)
+    fields = db.Column(db.JSONB, default=dict)
     """
     {
         "fields": [
