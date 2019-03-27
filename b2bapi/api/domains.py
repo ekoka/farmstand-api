@@ -150,6 +150,8 @@ def _get_domain_resource(domain, lang, partial=False):
     products_url = url_for('api.get_products', domain=domain.name)
     product_url = url_for('api.get_product', domain=domain.name, 
                           product_id='{product_id}')
+    product_json_url = url_for('api.get_product_json', domain=domain.name,
+                               product_id='{product_id}')
     product_details_url = url_for('api.get_product_details', domain=domain.name)
     product_resources_url = url_for(
         'api.get_product_resources', domain=domain.name)
@@ -166,14 +168,15 @@ def _get_domain_resource(domain, lang, partial=False):
     rv._l('productlist:source_images', source_images_url)
     rv._l('productlist:images', images_url)
     #rv._l('productlist:inquiries', inquiries_url)
-    rv._l('productlist:product', product_url, unquote=True, templated=True )
+    rv._l('productlist:product', product_url, unquote=True, templated=True)
+    rv._l('productlist:product_json', product_json_url, unquote=True,
+          templated=True)
     rv._l('productlist:product_details', product_details_url)
     rv._l('productlist:product_resources', product_resources_url)
 
     # include company info
     rv._k('data', delocalize_data(domain.data, Domain.localized_fields, lang))
     rv._k('meta', domain.meta)
-
     return rv.document
 
 def _get_domain(domain_name, account_id):

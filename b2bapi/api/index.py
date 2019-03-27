@@ -29,10 +29,10 @@ def get_root():
     #._l('productlist:domain', '/api/v1/domain/{domain}', templated=True)
     rv._l('productlist:domain', url_for('api.get_domain', domain_name='{domain}'),
         templated=True, unquote=True)
-    rv._l('productlist:domain-name-check', url_for(
+    rv._l('productlist:domain_name_check', url_for(
         'api.get_domain_name_check', name='{domain}'), templated=True,
         unquote=True)
-    rv._l('productlist:public-root', url_for(
+    rv._l('productlist:public_root', url_for(
         'api.get_public_root', domain='{domain}'), templated=True, 
         unquote=True)
         #'/api/v1/domain-name-search?name={domain}', templated=True)

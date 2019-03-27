@@ -338,8 +338,7 @@ def json_response(data, status=None, headers=None, json_dumps=True):
     json_dumps = True
     if json_dumps:
         # for when data needs to be converted to json
-        data = json.dumps(data, use_decimal=True, indent=2, 
-                          default=json_serialize)
+        data = json.dumps(data, use_decimal=True, default=json_serialize)
     return Response(
         data, mimetype='application/json',
         status=status, headers=headers)

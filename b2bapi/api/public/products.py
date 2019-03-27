@@ -15,14 +15,10 @@ from .._route import route, json_abort, hal
 
 
 # ------------------------ Products ------------------------ # 
-def _get_filter_resource(f, partial=False):
+def _get_filter_resource(f):
     rv = hal()
-    rv._l('self', url_for('api.get_public_filter', filter_id=f.filter_id))
-    rv._k('filter_id', f.filter_id)
-    rv._k('label', f.data.setdefault('label',{'en':None}).get('en'))
-    if f.parent and not partial:
-        rv._embed('parent', _get_filter_resource(f.parent, partial=True))
-        rv._k('level', f.level)
+    rv._l('self', url_for('api.get_public_filter', filter_id=clean_uuid(f.filter_id)))
+    rv._k('filter_id', clean_uuid(f.filter_id))
     return rv.document
 
 @route('/public/filters/<filter_id>', expects_domain=True)
@@ -35,100 +31,89 @@ def get_public_filter(filter_id, domain):
 
     return _get_filter_resource(f), 200, []
 
-@route('/public/filter-sets', expects_domain=True)
-def get_public_filter_sets(domain):
+@route('/public/filters', expects_domain=True)
+def get_public_filters(domain):
     domain_id = domain.domain_id
-    fsets = FSet.query.filter_by(domain_id=domain_id).all()
+    filters = Filter.query.filter_by(domain_id=domain_id).all()
 
     rv = hal() 
-    rv._l('self', url_for('api.get_public_filter_sets'))
-    rv._embed('filter_sets',[
-        _get_filter_set_resource(fs) for fs in  fsets
+    rv._l('self', url_for('api.get_public_filters'))
+    rv._embed('filters',[
+        _get_filter_resource(s) for f in  filters 
     ])
 
     return rv.document, 200, []
 
-@route('/public/filter-sets/<filter_set_id>', expects_domain=True)
-def get_public_filter_set(filter_set_id, domain):
+@route('/public/filters/<filter_id>', expects_domain=True)
+def get_public_filter(filter_id, domain):
     pass
 
-def _get_filter_set_resource(fs):
-    app.logger.info(fs.filters)
+def _get_filter_resource(f):
     rv = hal()
     rv._l('self', url_for(
-        'api.get_public_filter_set', filter_set_id=fs.filter_set_id))
-    rv._k('filter_set_id', fs.filter_set_id)
-    rv._k('label', fs.data.setdefault('label', {'en':None}).get('en'))
-    rv._k('multichoice', fs.data.setdefault('multichoice', True))
-    rv._k('filters', 
-          [{'filter_id':f.filter_id, 'label':f.data.setdefault(
+        'api.get_public_filter', filter_id=f.filter_id))
+    rv._k('filter_id', f.filter_id)
+    rv._k('label', f.data.setdefault('label', {'en':None}).get('en'))
+    rv._k('multichoice', f.data.setdefault('multichoice', True))
+    rv._k('options', 
+          [{'filter_option_id':fo.filter_option_id, 'label':fo.data.setdefault(
               'label', {'en':None}).get('en')}
-           for f in fs.filters ])
+           for fo in f.options ])
     return rv.document
 
 @route('/public/products', expects_params=True, expects_domain=True)
 def get_public_products(params, domain):
     domain_id = domain.domain_id
-    baseq = Product.query.filter(Product.domain_id==domain_id)
+    q = Product.query.filter(Product.domain_id==domain_id)
     
+    # params is a quoted json
+    try:
+        data = json.loads(parse.unquote(params))
+    except:
+        json_abort(400, {'error': 'Invalid token'})
     if params.get('filters'):
-        filters = params.getlist('filters')
+        options = params.getlist('options')
         subqrs = []
-        for set_id in params.getlist('sets'):
-            subq = (Product.query.join(Product.filters).filter(Filter.filter_id.in_(filters), 
-                            Filter.filter_set_id==set_id).subquery())
-            baseq = baseq.join(subq, Product.product_id==subq.c.product_id)
+        for filter_id in params.getlist('filters'):
+            subq = (Product.query.join(Product.filters).filter(
+                Filter.filter_id.in_(filters), 
+                Filter.filter_id==filter_id).subquery())
+            q = q.join(subq, Product.product_id==subq.c.product_id)
 
         #subq = qrs[1].subquery()
         #q = qrs[0].join(subq, Product.product_id==subq.c.product_id)
         
-    products = baseq.all()
+    products = q.all()
 
     product_url = url_for('api.get_public_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', url_for('api.get_public_products',**params))
-    #rv._l('simpleb2b:product', product_url, unquote=True, templated=True)
-
-    rv._embed('products', [_get_product_resource(p, partial=True)
-                           for p in products])
+    rv._l('simpleb2b:product', product_url, unquote=True, templated=True)
+    rv._k('products', [p.product_id for p in products])
     return rv.document, 200, []
 
-def filtered_query(q, set_id):
-    fs = FSet.query.filter(FSet.filter_set_id==set_id).subquery()
-    return q.join(fs, fs.c.filter_set_id==Filter.filter_set_id)
+def filtered_query(q, filter_id):
+    f = Filter.query.filter(Filter.filter_id==filter_id).subquery()
+    return q.join(f, f.c.filter_id==Filter.filter_id)
     
-
-#def query():
-#    return text('''
-#    SELECT p.* FROM products p
-#    INNER JOIN  products_filters pf
-#    ON pf.product_id = p.product_id
-#    INNER JOIN filters f
-#    ON f.filter_id=pf.filter_id
-#    INNER JOIN (
-#        SELECT filter_set_id 
-#        FROM filter_sets OFFSET {offset} LIMIT 1
-#    fs
-#    ON fs.filter_set_id = f.filter_set_id
-#    WHERE  f.filter_id in :filter_ids
-#                ''', {filter_ids:[]})
-
-def _get_product_resource(p, partial=True):
+def _get_product_resource(p):
     rv = hal()
-    rv._l('self', url_for('api.get_public_product', product_id=p.product_id,
-                          partial=partial))
-    rv._k('product_id', p.product_id.hex)
-    if partial:
-        rv._k('partial', partial)
-        rv._k('fields', [f.get('en') 
-                         for f in p.data.setdefault('fields', [])[:3]])
-    else:
-        rv._k('available', p.available)
-        rv._k('fields', [f.get('en') for f in p.data.setdefault('fields', [])])
-        rv._k('unit_price', p.data.get('unit_price'))
-        rv._k('quantity_unit', p.data.get('quantity_unit'))
-        rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
+    rv._l('self', url_for(
+        'api.get_public_product', product_id=clean_uuid(p.product_id)))
+    rv._k('product_id', clean_uuid(p.product_id))
+    #rv._k('available', p.available)
+    rv._k('fields', [f.get('en') for f in p.fields.setdefault('fields', [])])
+    #rv._k('unit_price', p.fields.get('unit_price'))
+    #rv._k('quantity_unit', p.fields.get('quantity_unit'))
+    rv._k('filters', _get_product_filter_options(p.filter_options))
     return rv.document
+
+def _get_product_filter_options(filter_options):
+    filters = {}
+    for o in filter_options:
+        fo = filters.setdefault(clean_uuid(o.filter_id), [])
+        fo.append(clean_uuid(o.filter_option_id))
+    return [{'filter_id': k, 'options': v} for k,v in filters.items()]
 
 def _get_product(product_id, domain_id):
     product_id = clean_uuid(product_id)
@@ -144,10 +129,8 @@ def _get_product(product_id, domain_id):
        expects_params=True)
 def get_public_product(product_id, domain, params):
     # in the meantime, while waiting for validation
-    partial = int(params.get('partial', False))
-    app.logger.info(partial)
     product = _get_product(product_id, domain.domain_id)
-    document = _get_product_resource(product, partial=partial)
+    document = _get_product_resource(product)
     return document, 200, []
 
 #def filtered_query(q, filters):
@@ -169,10 +152,10 @@ def get_public_product(product_id, domain, params):
 # ------------------------ Product Schema ------------------------ # 
 
 def _set_default_product_schema(domain_id):
-    ps = PSchema.query.get(domain_id)
+    ps = PSchema.query.filter_by(domain_id=domain_id).first()
     if not ps:
         try:
-            ps = PSchema(product_schema_id=domain_id)
+            ps = PSchema(domain_id=domain_id)
             db.session.add(ps)
             db.session.flush()
         except Exception as e:

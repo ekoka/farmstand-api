@@ -93,6 +93,20 @@ def get_product_schema(lang):
                      for f in product_schema['schema']['fields']])
     return rv.document, 200, []
 
+@route('/products/<product_id>/json', authenticate=True, expects_domain=True)
+def get_product_json(product_id, domain):
+    product = _get_product(product_id, domain.domain_id)
+    data = json.dumps(product.fields, indent=4)
+    return {'json':data}, 200, []
+
+@route('/products/<product_id>/json', methods=['put'], authenticate=True,
+       expects_domain=True, expects_data=True)
+def put_product_json(product_id, domain, data):
+    product = _get_product(product_id, domain.domain_id)
+    product.fields = data
+    db.session.flush()
+    return {}, 200, []
+
 def _get_product(product_id, domain_id):
     product_id = clean_uuid(product_id)
     try:
