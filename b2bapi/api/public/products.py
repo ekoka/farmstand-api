@@ -1,4 +1,5 @@
 import simplejson as json
+from urllib import parse
 
 from flask import redirect, g, current_app as app, abort, url_for
 from sqlalchemy.orm import exc as orm_exc
@@ -7,9 +8,11 @@ from vino import errors as vno_err
 
 from b2bapi.db import db
 from b2bapi.db.models.products import Product, ProductSchema as PSchema
-from b2bapi.db.models.filters import Filter, FilterOption
+from b2bapi.db.models.filters import Filter, FilterOption, ProductFilterOption
 from b2bapi.utils.uuid import clean_uuid
 from .._route import route, json_abort, hal
+from ..products import _delocalize_product_field, _get_product_filters
+from ..images import img_aspect_ratios
 
 #from .validation.products import (add_product, edit_product)
 
@@ -64,20 +67,18 @@ def _get_filter_resource(f):
 @route('/public/products', expects_params=True, expects_domain=True)
 def get_public_products(params, domain):
     domain_id = domain.domain_id
+    # create a base query object
     q = Product.query.filter(Product.domain_id==domain_id)
     
-    # params is a quoted json
-    try:
-        data = json.loads(parse.unquote(params))
-    except:
-        json_abort(400, {'error': 'Invalid token'})
+    # filters are passed as url quoted json string
     if params.get('filters'):
-        options = params.getlist('options')
-        subqrs = []
-        for filter_id in params.getlist('filters'):
-            subq = (Product.query.join(Product.filters).filter(
-                Filter.filter_id.in_(filters), 
-                Filter.filter_id==filter_id).subquery())
+        # TODO: validate that this is a list of objects with format 
+        # {'options': [...]}
+        filters = json.loads(parse.unquote(params['filters']))
+
+        for f in filters:
+            subq = ProductFilterOption.filter(
+                ProductFilterOption.filter_id.in_(f['options'])).subquery()
             q = q.join(subq, Product.product_id==subq.c.product_id)
 
         #subq = qrs[1].subquery()
@@ -88,13 +89,27 @@ def get_public_products(params, domain):
     product_url = url_for('api.get_public_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', url_for('api.get_public_products',**params))
-    rv._l('simpleb2b:product', product_url, unquote=True, templated=True)
+    rv._l('productlist:product', product_url, unquote=True, templated=True)
     rv._k('products', [p.product_id for p in products])
     return rv.document, 200, []
 
 def filtered_query(q, filter_id):
     f = Filter.query.filter(Filter.filter_id==filter_id).subquery()
     return q.join(f, f.c.filter_id==Filter.filter_id)
+
+@route('/public/product-resources', expects_params=True, expects_lang=True,
+       expects_domain=True)
+def get_public_product_resources(params, domain, lang):
+    product_ids = params.getlist('pid', [])
+    q = Product.query.filter_by(domain_id=domain.domain_id)
+
+    products = q.filter(Product.product_id.in_(product_ids)).all()
+
+    rv = hal()
+    rv._l('self', url_for('api.get_product_resources'))
+    rv._k('product_ids', [p.product_id for p in products])
+    rv._embed('products', [_get_product_resource(p, lang) for p in products])
+    return rv.document, 200, []
     
 def _get_product_resource(p):
     rv = hal()
@@ -106,6 +121,34 @@ def _get_product_resource(p):
     #rv._k('unit_price', p.fields.get('unit_price'))
     #rv._k('quantity_unit', p.fields.get('quantity_unit'))
     rv._k('filters', _get_product_filter_options(p.filter_options))
+    return rv.document
+
+def _get_product_resource(p, lang):
+    rv = hal()
+    rv._l('self', url_for('api.get_product', product_id=p.product_id))
+    rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
+    rv._l('filters', url_for('api.put_product_filters', product_id=p.product_id))
+
+    rv._k('product_id', clean_uuid(p.product_id))
+
+    rv._k('filters', _get_product_filters(p))
+    rv._k('priority', p.priority)
+    rv._k('last_update', p.updated_ts)
+
+    rv._k('images', [img_aspect_ratios(
+        i.image, aspect_ratios=['1:1'], sizes=['thumb', 'medium'])
+        for i in p.images
+    ])
+
+    rv._k('fields', [_delocalize_product_field(f, lang) 
+                     for f in p.fields.setdefault('fields', [])])
+
+    # NOTE: maybe we'll add this at some point
+    #rv._k('unit_price', p.data.get('unit_price'))
+    #rv._k('quantity_unit', p.data.get('quantity_unit'))
+    # TODO:
+    #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
+
     return rv.document
 
 def _get_product_filter_options(filter_options):
