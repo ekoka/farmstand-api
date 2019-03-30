@@ -19,9 +19,16 @@ from .product_utils import patch_record, Mismatch
 
 def _delocalize_product_field(field, lang):
     rv = dict(**field)
-    if field.get('field_type') in Field.text_types:
+    if field.get('localized'):
         rv['value'] = rv.setdefault('value', {}).get(lang)
     return rv
+
+def _localize_product_fields(fields, lang):
+    for field in fields:
+        if 'value' not in field:
+            continue
+        if field.get('localized'):
+            field['value'] = {lang: field['value']}
 
 from .images import img_aspect_ratios
 
@@ -46,7 +53,7 @@ def get_products(params, domain, lang):
 @route('/product-resources', expects_params=True, expects_lang=True,
        expects_domain=True, authenticate=True, readonly=True)
 def get_product_resources(params, domain, lang):
-    product_ids = params.getlist('pid', None)
+    product_ids = params.getlist('pid')
     q = Product.query.filter_by(domain_id=domain.domain_id)
 
     if product_ids:
@@ -128,12 +135,14 @@ def get_product(product_id, domain, params, lang):
 
 def _get_product_resource(p, lang):
     rv = hal()
-    rv._l('self', url_for('api.get_product', product_id=p.product_id))
-    rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
-    rv._l('filters', url_for('api.put_product_filters', product_id=p.product_id))
+    rv._l('self', url_for(
+        'api.get_product', product_id=clean_uuid(p.product_id)))
+    rv._l('images', url_for(
+        'api.get_product_images', product_id=clean_uuid(p.product_id)))
+    rv._l('filters', url_for(
+        'api.put_product_filters', product_id=clean_uuid(p.product_id)))
 
-    rv._k('product_id', p.product_id.hex)
-    #rv._k('visible', p.visible)
+    rv._k('product_id', clean_uuid(p.product_id))
 
     rv._k('filters', _get_product_filters(p))
     rv._k('priority', p.priority)
@@ -163,34 +172,6 @@ def _get_product_filters(p):
     return rv
 
 
-def _fields(fields, lang):
-    if not fields:
-        return []
-    names = [f['name'] for f in fields if f.get('name')]
-    field_metas = load_field_metas(names, g.domain['domain_id'])
-    return [_field(f, field_metas.get(f.get('name')), lang) for f in fields]
-
-def _field(f, meta, lang):
-    rv = dict(
-        name = f.get('name'),
-        #field_type = meta.field_type,
-        #label = meta.schema.get('label', {}).get(lang, None)
-        publish = f.get('publish'),
-        captionable = f.get('captionable'),
-        searchable = f.get('searchable'),
-        meta = {
-            'url': url_for('api.get_field', field_id=clean_uuid(meta.field_id)),
-            'name': f['name'],
-            'field_id': clean_uuid(meta.field_id),
-            'rel': 'FieldMeta',} if meta else None,
-    )
-    if meta and (meta.field_type in Field.text_types):
-        rv['value'] = f.get('value', {}).get(lang)
-    else:
-        rv['value'] = f.get('value', None)
-    return rv
-
-
 def load_field_metas(schema_names, domain_id):
     # query the db for fields with those names and produce
     # a dict indexed by those names
@@ -198,16 +179,6 @@ def load_field_metas(schema_names, domain_id):
                                 Field.name.in_(schema_names)).all()
     return {f.name:f for f in fields}
 
-
-def hydrate_field(product_field, field):
-    pf = product_field
-    return {
-        'name': pf['name'],
-        'searchable':  pf.get('searchable', False),
-        'publish':  pf.get('publish', False),
-        'value': pf.get('value', None),
-        #'properties': field.schema if field else None,
-    }
 
 def populate_product(product, data, lang):
     for k,v in data.items():
@@ -221,7 +192,7 @@ def _merge_fields(productfields, fields, lang):
     # loop through the uploaded fields
     for f in fields:
         # if field is a text type
-        if f['field_type'] in Field.text_types:
+        if f.get('localized'):
             # extract the uploaded value and reset the field value
             # to an empty dict, ready to take localized values
             f['value'], value = {}, f.get('value')
@@ -349,13 +320,6 @@ def update_filter_options(product_id, filters, domain_id):
     except:
         raise
         db.session.rollback()
-
-def _localize_product_fields(fields, lang):
-    for field in fields:
-        if 'value' not in field:
-            continue
-        if field.get('field_type') in Field.text_types:
-            field['value'] = {lang: field['value']}
 
 """
 For a data to be patched to the product, it must already be present. 
@@ -531,3 +495,42 @@ def filtered_query(q, filters):
 #                    df['value'] = pf.get('value', {}) # localized values
 #            df['value'][lang] = value # merge localized and uploaded value 
 #    productdata['fields'] = datafields
+
+#def _fields(fields, lang):
+#    if not fields:
+#        return []
+#    names = [f['name'] for f in fields if f.get('name')]
+#    field_metas = load_field_metas(names, g.domain['domain_id'])
+#    return [_field(f, field_metas.get(f.get('name')), lang) for f in fields]
+#
+#def _field(f, meta, lang):
+#    rv = dict(
+#        name = f.get('name'),
+#        #field_type = meta.field_type,
+#        #label = meta.schema.get('label', {}).get(lang, None)
+#        publish = f.get('publish'),
+#        captionable = f.get('captionable'),
+#        searchable = f.get('searchable'),
+#        meta = {
+#            'url': url_for('api.get_field', field_id=clean_uuid(meta.field_id)),
+#            'name': f['name'],
+#            'field_id': clean_uuid(meta.field_id),
+#            'rel': 'FieldMeta',} if meta else None,
+#    )
+#    if meta and (meta.field_type in Field.text_types):
+#        rv['value'] = f.get('value', {}).get(lang)
+#    else:
+#        rv['value'] = f.get('value', None)
+#    return rv
+
+
+#def hydrate_field(product_field, field):
+#    pf = product_field
+#    return {
+#        'name': pf['name'],
+#        'searchable':  pf.get('searchable', False),
+#        'publish':  pf.get('publish', False),
+#        'value': pf.get('value', None),
+#        #'properties': field.schema if field else None,
+#    }
+

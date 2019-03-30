@@ -17,13 +17,6 @@ from ..images import img_aspect_ratios
 #from .validation.products import (add_product, edit_product)
 
 
-# ------------------------ Products ------------------------ # 
-def _get_filter_resource(f):
-    rv = hal()
-    rv._l('self', url_for('api.get_public_filter', filter_id=clean_uuid(f.filter_id)))
-    rv._k('filter_id', clean_uuid(f.filter_id))
-    return rv.document
-
 @route('/public/filters/<filter_id>', expects_domain=True)
 def get_public_filter(filter_id, domain):
     try:
@@ -37,19 +30,15 @@ def get_public_filter(filter_id, domain):
 @route('/public/filters', expects_domain=True)
 def get_public_filters(domain):
     domain_id = domain.domain_id
-    filters = Filter.query.filter_by(domain_id=domain_id).all()
+    filters = Filter.query.filter_by(domain_id=domain_id, active=True).all()
 
     rv = hal() 
     rv._l('self', url_for('api.get_public_filters'))
     rv._embed('filters',[
-        _get_filter_resource(s) for f in  filters 
+        _get_filter_resource(f) for f in  filters 
     ])
 
     return rv.document, 200, []
-
-@route('/public/filters/<filter_id>', expects_domain=True)
-def get_public_filter(filter_id, domain):
-    pass
 
 def _get_filter_resource(f):
     rv = hal()
@@ -100,7 +89,7 @@ def filtered_query(q, filter_id):
 @route('/public/product-resources', expects_params=True, expects_lang=True,
        expects_domain=True)
 def get_public_product_resources(params, domain, lang):
-    product_ids = params.getlist('pid', [])
+    product_ids = params.getlist('pid')
     q = Product.query.filter_by(domain_id=domain.domain_id)
 
     products = q.filter(Product.product_id.in_(product_ids)).all()
