@@ -145,11 +145,11 @@ def get_domains(account, lang):
 def _get_domain_resource(domain, lang, partial=False):
     domain_url = url_for('api.get_domain', domain_name=domain.name)
     product_schema_url = url_for('api.get_product_schema', domain=domain.name)
-    filters_url = url_for('api.get_filters', domain=domain.name)
-    filter_url = url_for('api.get_filter', domain=domain.name, 
-                          filter_id='{filter_id}')
-    filter_resources_url = url_for(
-        'api.get_filter_resources', domain=domain.name)
+    groups_url = url_for('api.get_groups', domain=domain.name)
+    group_url = url_for('api.get_group', domain=domain.name, 
+                          group_id='{group_id}')
+    group_resources_url = url_for(
+        'api.get_group_resources', domain=domain.name)
     products_url = url_for('api.get_products', domain=domain.name)
     product_url = url_for('api.get_product', domain=domain.name, 
                           product_id='{product_id}')
@@ -165,9 +165,9 @@ def _get_domain_resource(domain, lang, partial=False):
     rv._k('name', domain.name)
     rv._k('creation_date', domain.creation_date.date())
     rv._l('productlist:product_schema', product_schema_url)
-    rv._l('productlist:filters', filters_url)
-    rv._l('productlist:filter_resources', filter_resources_url)
-    rv._l('productlist:filter', filter_url, unquote=True, templated=True)
+    rv._l('productlist:groups', groups_url)
+    rv._l('productlist:group_resources', group_resources_url)
+    rv._l('productlist:group', group_url, unquote=True, templated=True)
     rv._l('productlist:products', products_url)
     rv._l('productlist:source_images', source_images_url)
     rv._l('productlist:images', images_url)

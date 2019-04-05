@@ -11,7 +11,7 @@ from vino import errors as vno_err
 from b2bapi.db import db
 from b2bapi.db.models.products import Product
 from b2bapi.db.models.meta import ProductType, Field
-from b2bapi.db.models.filters import FilterOption
+from b2bapi.db.models.groups import GroupOption
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.schema import generic as product_schema
 from ._route import route, json_abort, hal
@@ -139,12 +139,12 @@ def _get_product_resource(p, lang):
         'api.get_product', product_id=clean_uuid(p.product_id)))
     rv._l('images', url_for(
         'api.get_product_images', product_id=clean_uuid(p.product_id)))
-    rv._l('filters', url_for(
-        'api.put_product_filters', product_id=clean_uuid(p.product_id)))
+    rv._l('groups', url_for(
+        'api.put_product_groups', product_id=clean_uuid(p.product_id)))
 
     rv._k('product_id', clean_uuid(p.product_id))
 
-    rv._k('filters', _get_product_filters(p))
+    rv._k('groups', _get_product_groups(p))
     rv._k('priority', p.priority)
     rv._k('last_update', p.updated_ts)
 
@@ -160,15 +160,15 @@ def _get_product_resource(p, lang):
     #rv._k('unit_price', p.data.get('unit_price'))
     #rv._k('quantity_unit', p.data.get('quantity_unit'))
     # TODO:
-    #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
+    #rv._embed('groups', [_get_group_resource(f, True) for f in p.groups])
 
     return rv.document
 
-def _get_product_filters(p):
+def _get_product_groups(p):
     rv = {}
-    for fo in p.filter_options:
-        rv.setdefault(clean_uuid(fo.filter_id), []).append(clean_uuid(
-            fo.filter_option_id))
+    for fo in p.group_options:
+        rv.setdefault(clean_uuid(fo.group_id), []).append(clean_uuid(
+            fo.group_option_id))
     return rv
 
 
@@ -249,14 +249,14 @@ def put_product(product_id, data, domain, lang):
     db_flush()
     return {}, 200, []
 
-@route('/products/<product_id>/filters',
+@route('/products/<product_id>/groups',
        methods=['PUT'], expects_domain=True, expects_data=True,
        authenticate=True)
-def put_product_filters(product_id, data, domain):
+def put_product_groups(product_id, data, domain):
     #TODO: validation
-    filters = data.get('filters') or  []
+    groups = data.get('groups') or  []
     try:
-        update_filter_options(product_id, filters, domain.domain_id)
+        update_group_options(product_id, groups, domain.domain_id)
     except:
         db.session.rollback()
         raise
@@ -278,10 +278,10 @@ def get_product_details(domain, lang, params):
                            for p in products])
     return rv.document, 200, []
 
-def update_filter_options(product_id, filters, domain_id):
+def update_group_options(product_id, groups, domain_id):
     try:
         db.session.execute(
-            'DELETE FROM products_filter_options WHERE domain_id=:domain_id ' 
+            'DELETE FROM products_group_options WHERE domain_id=:domain_id ' 
             'AND product_id=:product_id',
             {
                 'domain_id':domain_id, 
@@ -292,28 +292,28 @@ def update_filter_options(product_id, filters, domain_id):
         raise
         json_abort(400, {'error': 'Bad format'})
 
-    if not filters:
+    if not groups:
         return
 
     options = []
-    for filter_id,filter_options in filters.items():
-        options.extend(FilterOption.query.filter(
-            FilterOption.filter_id==filter_id,
-            FilterOption.filter_option_id.in_(filter_options),
-            FilterOption.domain_id==domain_id,
+    for group_id,group_options in groups.items():
+        options.extend(GroupOption.query.filter(
+            GroupOption.group_id==group_id,
+            GroupOption.group_option_id.in_(group_options),
+            GroupOption.domain_id==domain_id,
         ).all())
 
     new = [{
         'domain_id': domain_id, 
         'product_id': product_id,
-        'filter_option_id': o.filter_option_id, 
+        'group_option_id': o.group_option_id, 
     } for o in options]
 
     if new:
         db.session.execute(
-            'insert into products_filter_options '
-            '(domain_id, filter_option_id, product_id) values '
-            '(:domain_id, :filter_option_id, :product_id)', new)
+            'insert into products_group_options '
+            '(domain_id, group_option_id, product_id) values '
+            '(:domain_id, :group_option_id, :product_id)', new)
 
     try:
         db.session.flush()
@@ -360,17 +360,17 @@ def delete_product(product_id):
     return ({}, 200, [])
 
 
-def filtered_query(q, filters):
-    filter_path = 'data#>\'{{fields,{name},value}}\''
-    text_filter = '{} @> \'"{{value}}"\''.format(filter_path)
-    bool_filter = '{} @> \'{{value}}\''.format(filter_path)
+def grouped_query(q, groups):
+    group_path = 'data#>\'{{fields,{name},value}}\''
+    text_group = '{} @> \'"{{value}}"\''.format(group_path)
+    bool_group = '{} @> \'{{value}}\''.format(group_path)
 
-    for n,v in filters:
+    for n,v in groups:
         if v in (True,False):
             v = str(v).lower()
-            q = q.filter(db.text(bool_filter.format(name=n, value=v)))
+            q = q.filter(db.text(bool_group.format(name=n, value=v)))
         else:
-            q = q.filter(db.text(text_filter.format(name=n, value=v)))
+            q = q.filter(db.text(text_group.format(name=n, value=v)))
     return q
 
 
@@ -380,9 +380,9 @@ def filtered_query(q, filters):
 #    min_id = None
 #    domain_id = g.domain['domain_id']
 #    q = Product.query.filter_by(domain_id=domain_id)
-#    if params.get('filters'): 
-#        filters = json.loads(params['filters'])
-#        q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
+#    if params.get('groups'): 
+#        groups = json.loads(params['groups'])
+#        q = grouped_query(q, [(k,v) for k,v in groups.iteritems()])
 #    #_p_order = lambda p: p.data['fields_order'][0]
 #    products = q.all()
 #    rv = {

@@ -46,7 +46,7 @@ from . import (
     billing,
     domains,
     products,
-    filters,
+    groups,
     images,
     accounts,
     #inquiries,

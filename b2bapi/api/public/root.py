@@ -12,8 +12,8 @@ def get_public_root(domain):
     rv._l('self', url_for('api.get_public_root'))
     rv._l('productlist:public_products', url_for(
         'api.get_public_products', domain=domain.name))
-    rv._l('productlist:public_filters', url_for(
-        'api.get_public_filters', domain=domain.name))
+    rv._l('productlist:public_groups', url_for(
+        'api.get_public_groups', domain=domain.name))
     rv._l('productlist:public_product_schema', url_for(
         'api.get_public_product_schema', domain=domain.name))
     rv._l('productlist:public_product_resources', url_for(

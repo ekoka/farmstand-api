@@ -8,47 +8,47 @@ from vino import errors as vno_err
 
 from b2bapi.db import db
 from b2bapi.db.models.products import Product, ProductSchema as PSchema
-from b2bapi.db.models.filters import Filter, FilterOption, ProductFilterOption
+from b2bapi.db.models.groups import Group, GroupOption, ProductGroupOption
 from b2bapi.utils.uuid import clean_uuid
 from .._route import route, json_abort, hal
-from ..products import _delocalize_product_field, _get_product_filters
+from ..products import _delocalize_product_field, _get_product_groups
 from ..images import img_aspect_ratios
 
 #from .validation.products import (add_product, edit_product)
 
 
-@route('/public/filters/<filter_id>', expects_domain=True)
-def get_public_filter(filter_id, domain):
+@route('/public/groups/<group_id>', expects_domain=True)
+def get_public_group(group_id, domain):
     try:
-        f = Filter.query.filter_by(
-            filter_id=filter_id, domain_id=domain.domain_id).one()
+        f = Group.query.filter_by(
+            group_id=group_id, domain_id=domain.domain_id).one()
     except:
-        json_abort(404, {'error': 'Filter not found'})
+        json_abort(404, {'error': 'Group not found'})
 
-    return _get_filter_resource(f), 200, []
+    return _get_group_resource(f), 200, []
 
-@route('/public/filters', expects_domain=True)
-def get_public_filters(domain):
+@route('/public/groups', expects_domain=True)
+def get_public_groups(domain):
     domain_id = domain.domain_id
-    filters = Filter.query.filter_by(domain_id=domain_id, active=True).all()
+    groups = Group.query.filter_by(domain_id=domain_id, active=True).all()
 
     rv = hal() 
-    rv._l('self', url_for('api.get_public_filters'))
-    rv._embed('filters',[
-        _get_filter_resource(f) for f in  filters 
+    rv._l('self', url_for('api.get_public_groups'))
+    rv._embed('groups',[
+        _get_group_resource(f) for f in  groups 
     ])
 
     return rv.document, 200, []
 
-def _get_filter_resource(f):
+def _get_group_resource(f):
     rv = hal()
     rv._l('self', url_for(
-        'api.get_public_filter', filter_id=f.filter_id))
-    rv._k('filter_id', f.filter_id)
+        'api.get_public_group', group_id=f.group_id))
+    rv._k('group_id', f.group_id)
     rv._k('label', f.data.setdefault('label', {'en':None}).get('en'))
     rv._k('multichoice', f.data.setdefault('multichoice', True))
     rv._k('options', 
-          [{'filter_option_id':fo.filter_option_id, 'label':fo.data.setdefault(
+          [{'group_option_id':fo.group_option_id, 'label':fo.data.setdefault(
               'label', {'en':None}).get('en')}
            for fo in f.options ])
     return rv.document
@@ -59,15 +59,15 @@ def get_public_products(params, domain):
     # create a base query object
     q = Product.query.filter(Product.domain_id==domain_id)
     
-    # filters are passed as url quoted json string
-    if params.get('filters'):
+    # groups are passed as url quoted json string
+    if params.get('groups'):
         # TODO: validate that this is a list of objects with format 
         # {'options': [...]}
-        filters = json.loads(parse.unquote(params['filters']))
+        groups = json.loads(parse.unquote(params['groups']))
 
-        for f in filters:
-            subq = ProductFilterOption.filter(
-                ProductFilterOption.filter_id.in_(f['options'])).subquery()
+        for f in groups:
+            subq = ProductGroupOption.filter(
+                ProductGroupOption.group_id.in_(f['options'])).subquery()
             q = q.join(subq, Product.product_id==subq.c.product_id)
 
         #subq = qrs[1].subquery()
@@ -82,9 +82,9 @@ def get_public_products(params, domain):
     rv._k('products', [p.product_id for p in products])
     return rv.document, 200, []
 
-def filtered_query(q, filter_id):
-    f = Filter.query.filter(Filter.filter_id==filter_id).subquery()
-    return q.join(f, f.c.filter_id==Filter.filter_id)
+def grouped_query(q, group_id):
+    f = Group.query.filter(Group.group_id==group_id).subquery()
+    return q.join(f, f.c.group_id==Group.group_id)
 
 @route('/public/product-resources', expects_params=True, expects_lang=True,
        expects_domain=True)
@@ -109,18 +109,18 @@ def _get_product_resource(p):
     rv._k('fields', [f.get('en') for f in p.fields.setdefault('fields', [])])
     #rv._k('unit_price', p.fields.get('unit_price'))
     #rv._k('quantity_unit', p.fields.get('quantity_unit'))
-    rv._k('filters', _get_product_filter_options(p.filter_options))
+    rv._k('groups', _get_product_group_options(p.group_options))
     return rv.document
 
 def _get_product_resource(p, lang):
     rv = hal()
     rv._l('self', url_for('api.get_product', product_id=p.product_id))
     rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
-    rv._l('filters', url_for('api.put_product_filters', product_id=p.product_id))
+    rv._l('groups', url_for('api.put_product_groups', product_id=p.product_id))
 
     rv._k('product_id', clean_uuid(p.product_id))
 
-    rv._k('filters', _get_product_filters(p))
+    rv._k('groups', _get_product_groups(p))
     rv._k('priority', p.priority)
     rv._k('last_update', p.updated_ts)
 
@@ -136,16 +136,16 @@ def _get_product_resource(p, lang):
     #rv._k('unit_price', p.data.get('unit_price'))
     #rv._k('quantity_unit', p.data.get('quantity_unit'))
     # TODO:
-    #rv._embed('filters', [_get_filter_resource(f, True) for f in p.filters])
+    #rv._embed('groups', [_get_group_resource(f, True) for f in p.groups])
 
     return rv.document
 
-def _get_product_filter_options(filter_options):
-    filters = {}
-    for o in filter_options:
-        fo = filters.setdefault(clean_uuid(o.filter_id), [])
-        fo.append(clean_uuid(o.filter_option_id))
-    return [{'filter_id': k, 'options': v} for k,v in filters.items()]
+def _get_product_group_options(group_options):
+    groups = {}
+    for o in group_options:
+        fo = groups.setdefault(clean_uuid(o.group_id), [])
+        fo.append(clean_uuid(o.group_option_id))
+    return [{'group_id': k, 'options': v} for k,v in groups.items()]
 
 def _get_product(product_id, domain_id):
     product_id = clean_uuid(product_id)
@@ -165,17 +165,17 @@ def get_public_product(product_id, domain, params):
     document = _get_product_resource(product)
     return document, 200, []
 
-#def filtered_query(q, filters):
-#    filter_path = 'data#>\'{{fields,{name},value}}\''
-#    text_filter = '{} @> \'"{{value}}"\''.format(filter_path)
-#    bool_filter = '{} @> \'{{value}}\''.format(filter_path)
+#def grouped_query(q, groups):
+#    group_path = 'data#>\'{{fields,{name},value}}\''
+#    text_group = '{} @> \'"{{value}}"\''.format(group_path)
+#    bool_group = '{} @> \'{{value}}\''.format(group_path)
 #
-#    for n,v in filters:
+#    for n,v in groups:
 #        if v in (True,False):
 #            v = str(v).lower()
-#            q = q.filter(db.text(bool_filter.format(name=n, value=v)))
+#            q = q.filter(db.text(bool_group.format(name=n, value=v)))
 #        else:
-#            q = q.filter(db.text(text_filter.format(name=n, value=v)))
+#            q = q.filter(db.text(text_group.format(name=n, value=v)))
 #    return q
 
 # ---------------------------------------------------------------- # 
