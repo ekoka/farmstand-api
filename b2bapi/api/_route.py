@@ -202,12 +202,12 @@ def access_token_authentication():
     if not key:
         return
     try:
-        access_key = AAccessKey.query.filter(AAccessKey.key==key).one()
+        access_token = AAccessKey.query.filter(AAccessKey.key==key).one()
     except Exception as e:
         return
-    if access_key:
-        g.access_key = access_key
-        g.current_account = access_key.account
+    if access_token:
+        g.access_token = access_token
+        g.current_account = access_token.account
         return True
 
 def access_token_cookie_setter(fnc):

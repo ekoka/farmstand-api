@@ -144,9 +144,12 @@ def get_domains(account, lang):
 
 def _get_domain_resource(domain, lang, partial=False):
     domain_url = url_for('api.get_domain', domain_name=domain.name)
-    #account_url = url_for('api.get_account', account_id=domain.account_id)
     product_schema_url = url_for('api.get_product_schema', domain=domain.name)
     filters_url = url_for('api.get_filters', domain=domain.name)
+    filter_url = url_for('api.get_filter', domain=domain.name, 
+                          filter_id='{filter_id}')
+    filter_resources_url = url_for(
+        'api.get_filter_resources', domain=domain.name)
     products_url = url_for('api.get_products', domain=domain.name)
     product_url = url_for('api.get_product', domain=domain.name, 
                           product_id='{product_id}')
@@ -161,9 +164,10 @@ def _get_domain_resource(domain, lang, partial=False):
     rv = hal()._l('self', domain_url)
     rv._k('name', domain.name)
     rv._k('creation_date', domain.creation_date.date())
-    #rv._l('productlist:account', account_url)
     rv._l('productlist:product_schema', product_schema_url)
     rv._l('productlist:filters', filters_url)
+    rv._l('productlist:filter_resources', filter_resources_url)
+    rv._l('productlist:filter', filter_url, unquote=True, templated=True)
     rv._l('productlist:products', products_url)
     rv._l('productlist:source_images', source_images_url)
     rv._l('productlist:images', images_url)
@@ -179,27 +183,23 @@ def _get_domain_resource(domain, lang, partial=False):
     rv._k('meta', domain.meta)
     return rv.document
 
-def _get_domain(domain_name, account_id):
+def _get_domain(domain_name):
     try:
-        return Domain.query.filter_by(
-            name=domain_name, 
-            owner_account_id=account_id).one()
+        return Domain.query.filter_by(name=domain_name).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error_code': 404, 'error': 'Domain not found'})
 
 @route('/domain/<domain_name>', domained=False, authenticate=True, 
-       expects_lang=True, expects_account=True)
-def get_domain(domain_name, account, lang):
-    domain = _get_domain(
-        domain_name=domain_name, account_id=account.account_id)
+       expects_lang=True, )
+def get_domain(domain_name, lang):
+    domain = _get_domain(domain_name=domain_name)
     return _get_domain_resource(domain, lang), 200, []
 
 @route('/domain/<domain_name>', methods=['put'], domained=False, authenticate=True, 
-       expects_lang=True, expects_account=True, expects_data=True)
-def put_domain(domain_name, data, account, lang):
+       expects_lang=True, expects_data=True)
+def put_domain(domain_name, data, lang):
     # TODO: validation
-    domain = _get_domain(
-        domain_name=domain_name, account_id=account.account_id)
+    domain = _get_domain(domain_name=domain_name)
 
     # changing localized data
     domain.data = localize_data(

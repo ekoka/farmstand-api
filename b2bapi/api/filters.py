@@ -18,12 +18,27 @@ def get_filters(lang, domain):
     filters = Filter.query.filter_by(domain_id=domain.domain_id).all()
     rv = hal()
     rv._l('self', url_for('api.get_filters'))
-    rv._l('filter', url_for('api.get_filter', filter_id='{filter_id}'),
+    rv._l('productlist:filter', url_for('api.get_filter', filter_id='{filter_id}'),
                             templated=True, unquote=True)
+    rv._l('productlist:filter_resources', url_for('api.get_filter_resources'))
     rv._k('filter_ids', [f.filter_id for f in filters])
-    rv._embed('filters', [_filter_resource(f, lang, partial=True) 
-                          for f in filters])
     return rv.document, 200, []
+
+@route('/filter-resources', expects_domain=True, expects_params=True, 
+       expects_lang=True, authenticate=True)
+def get_filter_resources(params, domain, lang):
+    filter_ids = params.getlist('fid')
+    q = Filter.query.filter_by(domain_id=domain.domain_id)
+
+    if filter_ids:
+        q = q.filter(Filter.filter_id.in_(filter_ids))
+    filters = q.all()
+    rv = hal()
+    rv._l('self', url_for('api.get_filter_resources'))
+    rv._k('filter_ids', [f.filter_id for f in filters])
+    rv._embed('filters', [_filter_resource(f, lang) for f in filters])
+    return rv.document, 200, []
+
 
 # TODO: review
 @route('/filters', methods=['POST'], expects_domain=True, expects_data=True,
@@ -142,14 +157,13 @@ def _get_filter(filter_id, domain_id):
     except: 
         json_abort(404, {'error': 'Filter not found'})
 
-def _filter_resource(f, lang, partial=False):
+def _filter_resource(f, lang,):
     rv = hal()
     rv._l('self', url_for('api.get_filter', filter_id=f.filter_id))
-    if not partial:
-        rv._l('options', url_for('api.post_filter_option', filter_id=f.filter_id))
-        rv._l('option', url_for('api.get_filter_option', filter_id=f.filter_id,
-                                filter_option_id='{filter_option_id}'),
-                                templated=True, unquote=True)
+    rv._l('options', url_for('api.post_filter_option', filter_id=f.filter_id))
+    rv._l('option', url_for('api.get_filter_option', filter_id=f.filter_id,
+                            filter_option_id='{filter_option_id}'),
+                            templated=True, unquote=True)
     rv._k('filter_id', f.filter_id)
     rv._k('active', f.active)
     rv._k('multichoice', f.multichoice)
@@ -163,7 +177,7 @@ def _filter_resource(f, lang, partial=False):
        authenticate=True)
 def get_filter(filter_id, lang, domain):
     f = _get_filter(filter_id, domain.domain_id)
-    rv = _filter_resource(f, lang, partial=False)
+    rv = _filter_resource(f, lang)
     return rv, 200, []
 
 @route('/filters/<filter_id>', methods=['DELETE'], expects_domain=True,
