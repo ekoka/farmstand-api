@@ -36,4 +36,9 @@ def get_root():
         'api.get_public_root', domain='{domain}'), templated=True, 
         unquote=True)
         #'/api/v1/domain-name-search?name={domain}', templated=True)
+    rv._l('productlist:domain_host_template', app.config[
+        'SUBDOMAIN_HOST_TEMPLATE'], templated=True, unquote=True)
+    rv._l('productlist:api_host', app.config['API_HOST'])
+    rv._l('productlist:account_host', app.config['ACCOUNT_HOST'])
+
     return rv.document, 200, []

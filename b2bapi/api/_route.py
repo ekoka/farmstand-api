@@ -8,6 +8,7 @@ import re
 from . import blueprint as bp
 from b2bapi.db import db
 from b2bapi.db.models.accounts import Account, AccountAccessKey as AAccessKey
+from b2bapi.db.models.domains import Domain
 from b2bapi.utils.cachelib import json_response
 from b2bapi.utils import abc as uls_abc
 from b2bapi.utils.hal import Resource as Hal
@@ -29,15 +30,13 @@ def set_domain(endpoint, values):
 def domain_extractor(endpoint, values):
     if 'domain' not in values:
         return
+
     domain_name = values.pop('domain')
 
-    domain = db.session.execute(
-        'select name, domain_id from domains where name = :name', 
-        {'name':domain_name}).fetchone()
-
-    if domain is None:
+    try:
+        domain = Domain.query.filter_by(name=domain_name).one()
+    except:
         raise werk_exc.NotFound('API Not Found')
-
     g.domain = domain
 
 def json_error(status_code, data=None):
