@@ -2,6 +2,7 @@
 .cache
 *config.py
 *config.ini
+gunicorn.service.bk
 gitmsg.gitcommit
 .pytest_cache
 thumbor/thumbor.conf
