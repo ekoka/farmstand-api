@@ -194,7 +194,7 @@ def post_account(data):
         json_abort(409, {'error': 'Account already exists'})
 
     rv = hal()
-    rv._l('location', url_for('api.get_account', account_id=account_id))
+    rv._l('location', url_for('api.get_account', account_id=account.account_id))
     rv._l('productlist:access_token', url_for('api.post_access_token'))
     return rv.document, 201, []
 
