@@ -245,7 +245,7 @@ class ImageUtil:
 
     def _default_config(self):
         return dict(
-            DUMP = '/tmp/simpleb2b/images',
+            DUMP = '/tmp/productlist/images',
             MAX_FILESIZE = 10000000, #10mb
             ASPECT_RATIO = (0.3333, 3.0),
             WEB_MAX_LENGTH = 900, # max width/height length
