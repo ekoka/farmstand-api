@@ -121,7 +121,7 @@ def img_aspect_ratios(image, aspect_ratios=None, sizes=None):
                else 'height')
     try:
         # TODO get this from config
-        thumbor_base = 'http://127.0.0.1:9001'
+        thumbor_base = app.config['THUMBOR_SERVER']
         for a_r in aspect_ratios:
             base_options = dict(image_url=image.meta['filename'])
             # if the a_r we're requesting is not 0:0 (i.e. original size) it
