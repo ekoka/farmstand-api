@@ -37,7 +37,7 @@ def post_source_image(domain, image=None):
             source_image.save()
             srcimg_record = SourceImage(
                 source_image_id=image_id,
-                domain_id=domain['domain_id'],
+                domain_id=domain.domain_id,
                 meta=get_image_data(source_image),
             )
 
@@ -46,7 +46,7 @@ def post_source_image(domain, image=None):
                                             context='web')
             main_copy.save()
             main_base = BaseImage(
-                domain_id = domain['domain_id'],
+                domain_id = domain.domain_id,
                 base_image_id = main_copy.blob_signature,
                 meta = get_image_data(main_copy),
                 source=srcimg_record,
@@ -74,7 +74,7 @@ def get_images(domain, params):
     params = validators.aspect_ratios.validate(params)
     rv = hal()
     rv._l('self',url_for('api.get_images', **params))
-    imgquery = BaseImage.query.filter_by(domain_id=domain['domain_id'])
+    imgquery = BaseImage.query.filter_by(domain_id=domain.domain_id)
     images = []
     for i in imgquery.all():
         img_resource = hal()
@@ -151,7 +151,7 @@ def _image_resource(image, **params):
 @route('/images/<image_id>', expects_domain=True)
 def get_image(image_id, domain):
     try:
-        image = BaseImage.query.get((image_id, domain['domain_id']))
+        image = BaseImage.query.get((image_id, domain.domain_id))
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error':'Image not Found'})
 
@@ -162,7 +162,7 @@ def get_image(image_id, domain):
        authenticate=True, expects_params=True)
 def get_product_images(product_id, domain, params):
     product_imgs = ProductImage.query.filter_by(
-        product_id=product_id, domain_id=domain['domain_id']).all()
+        product_id=product_id, domain_id=domain.domain_id).all()
     product_imgs.sort(key=lambda pi: pi.data.get('position'))
     rv = hal()
     rv._l('self', url_for('api.get_product_images', product_id=product_id))
@@ -177,7 +177,7 @@ def put_product_images(product_id, domain, data):
     db.session.execute(db.text(
         'delete from product_images '
         'where product_id=:product_id and domain_id=:domain_id'
-    ), {'product_id': product_id, 'domain_id': domain['domain_id']})
+    ), {'product_id': product_id, 'domain_id': domain.domain_id})
 
     #TODO: validation
     for position, image_id in enumerate(data):
@@ -225,7 +225,7 @@ def _get_source_image(image_id, domain_id):
 
 @route('/source-images/<image_id>', expects_domain=True)
 def get_source_image(image_id, domain):
-    record = _get_source_image(image_id, domain['domain_id'])
+    record = _get_source_image(image_id, domain.domain_id)
     return rv, 200, ()
 
 def get_image_data(image):

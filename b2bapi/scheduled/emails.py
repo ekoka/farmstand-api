@@ -12,7 +12,7 @@ def send(subject, content, to):
     m = Mailer(login, password, subject=subject, content=content, to=to)
     return m.send()
 
-@dramatiq.actor(actor_name='simpleb2b.send_passcode')
+@dramatiq.actor(actor_name='productlist.send_passcode')
 def send_passcode():
     app = dramatiq.flask_app
     signins = Signin.query.filter_by(sent=False).all()
@@ -35,7 +35,7 @@ def send_passcode():
 
 
 
-#@dramatiq.actor(actor_name='simpleb2b.send_activation_email')
+#@dramatiq.actor(actor_name='productlist.send_activation_email')
 #def send_activation_email():
 #    app = dramatiq.flask_app
 #    token_expr = {"tokens": [{"type": "activation_token", 
@@ -76,7 +76,7 @@ def send_passcode():
 #
 #    return True
 
-#@dramatiq.actor(actor_name='simpleb2b.send_password_reset_email')
+#@dramatiq.actor(actor_name='productlist.send_password_reset_email')
 #def send_password_reset_email():
 #    token_expr = {"tokens": [{"type": "reset_token", 
 #                              "status": "new"}]}
