@@ -21,7 +21,6 @@ from .validation import images as validators
 @route('/source-images', methods=['POST'], expects_files=['image'],
        expects_domain=True, authenticate=True)
 def post_source_image(domain, image=None):
-    #record = _get_source_image(image_id)
     # TODO: move this initialization inside POSTing of SourceImage
     source_file = image[0]
     config = app.config['IMAGE']
@@ -30,7 +29,7 @@ def post_source_image(domain, image=None):
             source_file, config=config, context='source')
         image_id = source_image.blob_signature
         try:
-            record = _get_source_image(image_id)
+            record = _get_source_image(image_id, domain.domain_id)
         except:
             # exception was raised, meaning new record
             # hence new file
