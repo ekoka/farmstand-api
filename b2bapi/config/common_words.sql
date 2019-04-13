@@ -14,12 +14,17 @@ SET check_function_bodies = false;
 SET client_min_messages = warning;
 SET row_security = off;
 
+ALTER TABLE ONLY public.common_words DROP CONSTRAINT common_words_word_key;
+ALTER TABLE ONLY public.common_words DROP CONSTRAINT common_words_pkey;
+ALTER TABLE public.common_words ALTER COLUMN word_id DROP DEFAULT;
+DROP SEQUENCE public.common_words_word_id_seq;
+DROP TABLE public.common_words;
 SET default_tablespace = '';
 
 SET default_with_oids = false;
 
 --
--- Name: common_words; Type: TABLE; Schema: public; Owner: demo_mvpb2b
+-- Name: common_words; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.common_words (
@@ -29,10 +34,8 @@ CREATE TABLE public.common_words (
 );
 
 
-ALTER TABLE public.common_words OWNER TO demo_mvpb2b;
-
 --
--- Name: common_words_word_id_seq; Type: SEQUENCE; Schema: public; Owner: demo_mvpb2b
+-- Name: common_words_word_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.common_words_word_id_seq
@@ -43,24 +46,22 @@ CREATE SEQUENCE public.common_words_word_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.common_words_word_id_seq OWNER TO demo_mvpb2b;
-
 --
--- Name: common_words_word_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: demo_mvpb2b
+-- Name: common_words_word_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.common_words_word_id_seq OWNED BY public.common_words.word_id;
 
 
 --
--- Name: word_id; Type: DEFAULT; Schema: public; Owner: demo_mvpb2b
+-- Name: word_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.common_words ALTER COLUMN word_id SET DEFAULT nextval('public.common_words_word_id_seq'::regclass);
 
 
 --
--- Data for Name: common_words; Type: TABLE DATA; Schema: public; Owner: demo_mvpb2b
+-- Data for Name: common_words; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.common_words (word_id, word, dictionary) FROM stdin;
@@ -3175,14 +3176,14 @@ COPY public.common_words (word_id, word, dictionary) FROM stdin;
 
 
 --
--- Name: common_words_word_id_seq; Type: SEQUENCE SET; Schema: public; Owner: demo_mvpb2b
+-- Name: common_words_word_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.common_words_word_id_seq', 3107, true);
 
 
 --
--- Name: common_words_pkey; Type: CONSTRAINT; Schema: public; Owner: demo_mvpb2b
+-- Name: common_words_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.common_words
@@ -3190,7 +3191,7 @@ ALTER TABLE ONLY public.common_words
 
 
 --
--- Name: common_words_word_key; Type: CONSTRAINT; Schema: public; Owner: demo_mvpb2b
+-- Name: common_words_word_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.common_words
