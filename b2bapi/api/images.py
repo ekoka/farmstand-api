@@ -29,7 +29,11 @@ def post_source_image(domain, image=None):
             source_file, config=config, context='source')
         image_id = source_image.blob_signature
         try:
-            record = _get_source_image(image_id, domain.domain_id)
+            srcimg_record = _get_source_image(image_id, domain.domain_id)
+            try:
+                main_base = srcimg_record.copies[0]
+            except IndexError:
+                main_base = None
         except:
             # exception was raised, meaning new record
             # hence new file
@@ -54,18 +58,19 @@ def post_source_image(domain, image=None):
             
             db.session.add(srcimg_record)
             db.session.flush()
-            rv = hal()
-            rv._k('source_image_id', image_id)
-            rv._k('image_id', main_base.base_image_id)
-            rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
-            rv._l('image', url_for('api.get_image', image_id=main_base.base_image_id))
-            
-            return rv.document, 200, ()
     except (IOError, TypeError) as e:
         db.session.rollback()
+        raise
         #TODO: more elaborate message
         json_abort(405, {})
 
+    rv = hal()
+    rv._k('source_image_id', image_id)
+    rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
+    if main_base:
+        rv._k('image_id', main_base.base_image_id)
+        rv._l('image', url_for('api.get_image', image_id=main_base.base_image_id))
+    return rv.document, 200, ()
 
 @route('images', expects_domain=True, expects_params=True, authenticate=True)
 def get_images(domain, params):
@@ -221,11 +226,6 @@ def _get_source_image(image_id, domain_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error':'Image not found'})
 
-@route('/source-images/<image_id>', expects_domain=True)
-def get_source_image(image_id, domain):
-    record = _get_source_image(image_id, domain.domain_id)
-    return rv, 200, ()
-
 def get_image_data(image):
     rv = dict(
         #original_name=image.original_name,
@@ -336,33 +336,3 @@ def set_aspect_ratios(base_image):
 #        crop[b] = 0
 #        crop[c] = crop[a] + target[width]
 #        crop[d] = target[height]
-
-    
-
-    
-
-
-#@route('/source-images/<image_id>/contents', methods=['PATCH'], 
-#       expects_files=['image'])
-#def patch_source_image_contents(image_id, image=None):
-#    record = _get_source_image(image_id)
-#    # TODO: move this initialization inside POSTing of SourceImage
-#    source_file = image[0]
-#    config = app.config['IMAGE']
-#    try:
-#        source_image = ImageUtil(
-#            source_file, config=config, context='source')
-#        web_image = source_image.thumbnail(config['WEB_MAX_LENGTH'],
-#                                           context='web')
-#        source_image.save()
-#        web_image.save()
-#        record.meta = get_image_data(source_image, web_image)
-#        db.session.flush()
-#    except (IOError, TypeError) as e:
-#        #TODO: more elaborate message
-#        json_abort(400)
-#    rv = {
-#        'status': APIUrl('api.get_source_image_contents', image_id=image_id)
-#    }
-#    return rv, 200, ()
-
