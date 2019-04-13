@@ -66,7 +66,7 @@ def post_source_image(domain, image=None):
 
     rv = hal()
     rv._k('source_image_id', image_id)
-    rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
+    #rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
     if main_base:
         rv._k('image_id', main_base.base_image_id)
         rv._l('image', url_for('api.get_image', image_id=main_base.base_image_id))
@@ -141,6 +141,10 @@ def img_aspect_ratios(image, aspect_ratios=None, sizes=None):
         raise
     return rv
 
+#@route('/source-images/<image_id>', expects_domain=True)
+#def get_source_image(image_id, domain):
+#    record = _get_source_image(image_id, domain.domain_id)
+#    return rv, 200, ()
 
 def _image_resource(image, **params):
     aspect_ratios = img_aspect_ratios(image, **params)
