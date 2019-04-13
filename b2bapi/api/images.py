@@ -54,19 +54,18 @@ def post_source_image(domain, image=None):
             
             db.session.add(srcimg_record)
             db.session.flush()
+            rv = hal()
+            rv._k('source_image_id', image_id)
+            rv._k('image_id', main_base.base_image_id)
+            rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
+            rv._l('image', url_for('api.get_image', image_id=main_base.base_image_id))
+            
+            return rv.document, 200, ()
     except (IOError, TypeError) as e:
         db.session.rollback()
-        raise
         #TODO: more elaborate message
         json_abort(405, {})
 
-    rv = hal()
-    rv._k('source_image_id', image_id)
-    rv._k('image_id', main_base.base_image_id)
-    rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
-    rv._l('image', url_for('api.get_image', image_id=main_base.base_image_id))
-    
-    return rv.document, 200, ()
 
 @route('images', expects_domain=True, expects_params=True, authenticate=True)
 def get_images(domain, params):
