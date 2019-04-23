@@ -258,7 +258,7 @@ def get_access_token_from_cookie():
     except StopIteration: 
         pass
 
-def domain_privacy_control(fnc):
+def domain_privacy_control(**kw):
     if g.domain.privacy_level=='public':
         return True
     try:
@@ -267,7 +267,7 @@ def domain_privacy_control(fnc):
         return False
 
 def authentication(fnc, process):
-    def default_process():
+    def default_process(**kw):
         try:
             authenticated = access_token_authentication()
             #if not authenticated:
@@ -281,7 +281,7 @@ def authentication(fnc, process):
 
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
-        authenticated = process()
+        authenticated = process(**kw)
         #try:
         #    authenticated = access_token_authentication()
         #    #if not authenticated:
@@ -297,13 +297,13 @@ def authentication(fnc, process):
                 'token.'})
     return wrapper
 
-def domain_owner_authorization(account):
+def domain_owner_authorization(account, **kw):
     return account.account_id==g.domain.owner_account_id
 
 def account_owner_authorization(account, **kw):
     return account.account_id==kw.get('account_id')
 
-def domain_member_authorization(account):
+def domain_member_authorization(account, **kw):
     if g.domain.privacy_level=='public':
         return True
     try:

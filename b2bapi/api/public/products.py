@@ -13,6 +13,7 @@ from b2bapi.utils.uuid import clean_uuid
 from .._route import (
     route, json_abort, hal,
     domain_member_authorization as domain_member,
+    domain_privacy_control as privacy_control,
 )
 from ..products import _delocalize_product_field, _get_product_groups
 from ..images import img_aspect_ratios
@@ -20,7 +21,8 @@ from ..images import img_aspect_ratios
 #from .validation.products import (add_product, edit_product)
 
 
-@route('/public/groups/<group_id>', expects_domain=True)
+@route('/public/groups/<group_id>', expects_domain=True,
+       authenticate=privacy_control, authorize=domain_member)
 def get_public_group(group_id, domain):
     try:
         f = Group.query.filter_by(
@@ -30,7 +32,8 @@ def get_public_group(group_id, domain):
 
     return _get_group_resource(f), 200, []
 
-@route('/public/groups', expects_domain=True)
+@route('/public/groups', expects_domain=True, 
+       authenticate=privacy_control, authorize=domain_member)
 def get_public_groups(domain):
     domain_id = domain.domain_id
     groups = Group.query.filter_by(domain_id=domain_id, active=True).all()
@@ -56,7 +59,8 @@ def _get_group_resource(f):
            for fo in f.options ])
     return rv.document
 
-@route('/public/products', expects_params=True, expects_domain=True)
+@route('/public/products', expects_params=True, expects_domain=True, 
+      authenticate=privacy_control, authorize=domain_member,)
 def get_public_products(params, domain):
     domain_id = domain.domain_id
     # create a base query object
@@ -90,7 +94,8 @@ def grouped_query(q, group_id):
     return q.join(f, f.c.group_id==Group.group_id)
 
 @route('/public/product-resources', expects_params=True, expects_lang=True,
-       expects_domain=True)
+       expects_domain=True, authenticate=privacy_control, 
+       authorize=domain_member)
 def get_public_product_resources(params, domain, lang):
     product_ids = params.getlist('pid')
     q = Product.query.filter_by(domain_id=domain.domain_id)
@@ -160,8 +165,9 @@ def _get_product(product_id, domain_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
-@route('/public/products/<product_id>', authorize=domain_member,
-       expects_domain=True, expects_params=True)
+@route('/public/products/<product_id>', expects_domain=True,
+       expects_params=True, authenticate=privacy_control, 
+       authorize=domain_member,)
 def get_public_product(product_id, domain, params):
     # in the meantime, while waiting for validation
     product = _get_product(product_id, domain.domain_id)
@@ -198,7 +204,8 @@ def _set_default_product_schema(domain_id):
             json_abort(401, {})
     return ps
 
-@route('/public/product-schema', expects_domain=True)
+@route('/public/product-schema', expects_domain=True, 
+       authenticate=privacy_control, authorize=domain_member)
 def get_public_product_schema(domain):
     ps = _set_default_product_schema(domain.domain_id)
     rv = hal()
