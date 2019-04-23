@@ -10,6 +10,7 @@ class Domain(db.Billable):
     creation_date = db.Column(db.DateTime, default=dtm.utcnow)
     data = db.Column(db.JSONB, default=dict)
     meta = db.Column(db.JSONB, default=dict)
+    # see additional fields in Billable model
 
     localized_fields = ['label', 'description']
 
@@ -23,6 +24,7 @@ class DomainAccount(db.Model):
         'domains.domain_id', ondelete='cascade'), primary_key=True)
     account_id = db.Column(None, db.ForeignKey(
         'accounts.account_id', ondelete='cascade'), primary_key=True)
+    active = db.Column(db.Boolean, default=False)
     role = db.Column(db.Unicode, nullable=False, default='buyer')
 
     domain = db.relationship(Domain, backref='accounts')

@@ -1,6 +1,5 @@
 - api:
     - product pagination
-    - add image to product
     - how to implement product search
     - create user account
     - get authorization key :

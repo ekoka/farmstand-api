@@ -15,21 +15,16 @@ from .domains import _get_domain_resource
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 from .validation import accounts as val
-from ._route import route, hal, json_abort
+from ._route import (
+    route, hal, json_abort, domain_owner_authorization as domain_owner_authz,
+    account_owner_authorization as account_owner_authz,
+)
 from .utils import localize_data, delocalize_data
 
 from b2bapi.utils.gauth import GAuth
    
 def generate_key(length=24):
     return secrets.token_urlsafe(length)
-
-
-#def create_access_key(account_id, reset=False):
-#    db.session.execute(
-#        'delete from account_access_keys where account_id=:account_id',
-#        {'account_id': account_id})
-#    return AccountAccessKey(key=generate_key(24), account_id=account_id)
-#
 
 """
 - an access key can only be created by providing an authentication token.
@@ -38,49 +33,6 @@ where it provides a temporary token that may not be verified.
 - but that token is restricted to creating a new account.
 - not accessing existing ones.
 """
-#@route('/access-key', methods=['PUT'], domained=False, expects_data=True)
-#def put_access_key(data):
-#    token_data = _verify_auth_token(data)
-#    if not token_data:
-#        return {'error': 'Invalid token'}, 400, []
-#
-#    # only authenticate verified emails.
-#    #if not token_data.get('email_verified', False):
-#    #    return {'error': 'Email not verified'}, 400, []
-#
-#    # use a login email account (login=True)
-#    email = AccountEmail.query.filter_by(
-#        email=token_data.get('email'), login=True).first()
-#
-#    if not email:
-#        rv = hal()
-#        rv._l('access_key', url_for('api.post_access_key'))
-#        rv._l('accounts', url_for('api.post_account'))
-#        rv._k('error', 'Account not found')
-#        return rv, 404, []
-#
-#    # if we got here it means we have indeed verified the token's email
-#    # let's update our account's email 
-#    email.verified = True
-#    email.account.confirmed = True
-#
-#    try:
-#        email.account.access_key = create_access_key(email.account.account_id)
-#    except sql_exc.IntegrityError as e:
-#        db.session.rollback()
-#        return {
-#            'error': 'Could not create key. Try again later.'
-#        }, 409, []
-#
-#    db.session.flush()
-#    access_key = email.account.access_key
-#
-#    rv = hal()
-#    rv._l('access_key', url_for('api.post_access_key'))
-#    rv._l('account', url_for('api.get_account', account_id=email.account_id))
-#    rv._k('access_key', access_key.key)
-#    return rv, 200, []
-
 
 def _verify_password_token(data):
     #try:
@@ -137,7 +89,7 @@ def get_profile(account):
     """
     The difference between this resource and `account` is that this
     one returns the authenticated user's profile, whereas `account` returns
-    the matched the account info that matches the url's `account_id`. 
+    the account info that matches the url's `account_id`. 
     That means that this resource can effectively only be retrieved by the
     account's owner and its full url can be published as part of the `Root`
     resource.
@@ -355,7 +307,7 @@ def _get_account(account_id):
         json_abort(404, {'error': 'Account not found'})
 
 
-@route('/accounts/<account_id>', domained=False, authenticate=True,
+@route('/accounts/<account_id>', domained=False, authorize=account_owner_authz,
        expects_lang=True)
 def get_account(account_id, lang):
     self = url_for('api.get_account', account_id=account_id)

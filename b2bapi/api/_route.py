@@ -276,18 +276,23 @@ def authentication(fnc):
                 'token.'})
     return wrapper
 
-def authorization(fnc, roles):
+def domain_owner_authorization(account):
+    return account.account_id==g.domain.owner_account_id
+
+def account_owner_authorization(account, **kw):
+    return account.account_id==kw.get('account_id')
+
+def authorization(fnc, process):
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
-        authorized = app.config.get('DEV_MODE', False)
+        dev_authorized = app.config.get('DEV_MODE', False)
         # if a resource must go through authorization a current_account should
         # be present in g.
-        acc = g.current_account
-        authorized = acc.authorize(g.domain, roles, kw) or authorized
-        if authorized:
+        authorized = process(g.current_account, **kw)
+
+        if authorized or dev_authorized:
             return fnc(*a, **kw)
-        json_abort(403, {'error': 'Forbidden: you do not have access to this '
-                         'resource.'})
+        json_abort(403, {'error': 'Not authorized'})
     return wrapper
 
 def account_injector(fnc):
@@ -518,7 +523,7 @@ def route(
         if authorize:
             # cannot have authz without authn
             _authenticate = True
-            fnc = authorization(fnc, authorize)
+            fnc = authorization(fnc, process=authorize)
 
         if _authenticate:
             fnc = authentication(fnc)
