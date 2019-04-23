@@ -10,7 +10,10 @@ from b2bapi.db import db
 from b2bapi.db.models.products import Product, ProductSchema as PSchema
 from b2bapi.db.models.groups import Group, GroupOption, ProductGroupOption
 from b2bapi.utils.uuid import clean_uuid
-from .._route import route, json_abort, hal
+from .._route import (
+    route, json_abort, hal,
+    domain_member_authorization as domain_member,
+)
 from ..products import _delocalize_product_field, _get_product_groups
 from ..images import img_aspect_ratios
 
@@ -157,8 +160,8 @@ def _get_product(product_id, domain_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
-@route('/public/products/<product_id>', authenticate=True, expects_domain=True,
-       expects_params=True)
+@route('/public/products/<product_id>', authorize=domain_member,
+       expects_domain=True, expects_params=True)
 def get_public_product(product_id, domain, params):
     # in the meantime, while waiting for validation
     product = _get_product(product_id, domain.domain_id)

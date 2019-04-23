@@ -8,7 +8,7 @@ import re
 from . import blueprint as bp
 from b2bapi.db import db
 from b2bapi.db.models.accounts import Account, AccountAccessKey as AAccessKey
-from b2bapi.db.models.domains import Domain
+from b2bapi.db.models.domains import Domain, DomainAccount
 from b2bapi.utils.cachelib import json_response
 from b2bapi.utils import abc as uls_abc
 from b2bapi.utils.hal import Resource as Hal
@@ -258,15 +258,36 @@ def get_access_token_from_cookie():
     except StopIteration: 
         pass
 
-def authentication(fnc):
-    @functools.wraps(fnc)
-    def wrapper(*a, **kw):
+def domain_privacy_control(fnc):
+    if g.domain.privacy_level=='public':
+        return True
+    try:
+        return access_token_authentication()
+    except (KeyError, AttributeError, ValueError): 
+        return False
+
+def authentication(fnc, process):
+    def default_process():
         try:
             authenticated = access_token_authentication()
             #if not authenticated:
             #    authenticated = proxy_authentication()
         except (KeyError, AttributeError, ValueError) as e:
             authenticated = False
+        return authenticated
+
+    if process is True:
+        process = default_process
+
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        authenticated = process()
+        #try:
+        #    authenticated = access_token_authentication()
+        #    #if not authenticated:
+        #    #    authenticated = proxy_authentication()
+        #except (KeyError, AttributeError, ValueError) as e:
+        #    authenticated = False
 
         if authenticated:
             return fnc(*a, **kw)
@@ -281,6 +302,18 @@ def domain_owner_authorization(account):
 
 def account_owner_authorization(account, **kw):
     return account.account_id==kw.get('account_id')
+
+def domain_member_authorization(account):
+    if g.domain.privacy_level=='public':
+        return True
+    try:
+        DomainAccount.query.filter_by(
+            account_id=account.account_id, 
+            domain_id=g.domain.domain_id,
+            active=True).one()
+        return True
+    except: 
+        return False
 
 def authorization(fnc, process):
     @functools.wraps(fnc)
@@ -485,7 +518,7 @@ def route(
 
         if expects_account:
             # cannot have account if user not authenticated
-            _authenticate = True
+            _authenticate = _authenticate or True
             fnc = account_injector(fnc)
 
         if expects_domain:
@@ -507,26 +540,26 @@ def route(
 
         if expects_role:
             # cannot have role without authentication
-            _authenticate = True
+            _authenticate = _authenticate or True
             fnc = role_injector(fnc)
 
         if expects_auth:
             # cannot pass auth without authentication
-            _authenticate = True
+            _authenticate = _authenticate or True
             fnc = auth_injector(fnc)
 
         if expects_access_token:
             # cannot pass token without authentication
-            _authenticate = True
+            _authenticate = _authenticate or True
             fnc = access_token_injector(fnc)
 
         if authorize:
             # cannot have authz without authn
-            _authenticate = True
+            _authenticate = _authenticate or True
             fnc = authorization(fnc, process=authorize)
 
         if _authenticate:
-            fnc = authentication(fnc)
+            fnc = authentication(fnc, _authenticate)
 
 
         fnc = json_response_wrapper(fnc)
