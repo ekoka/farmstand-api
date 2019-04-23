@@ -14,8 +14,16 @@ from b2bapi.db.models.meta import ProductType, Field
 from b2bapi.db.models.groups import GroupOption
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.schema import generic as product_schema
-from ._route import route, json_abort, hal
+from ._route import (
+    route, json_abort, hal,
+    domain_owner_authorization as domain_owner_authz,
+    account_owner_authorization as account_owner_authz,
+)
 from .product_utils import patch_record, Mismatch
+
+from .images import img_aspect_ratios
+
+from .validation.products import (add_product, edit_product, edit_product_members)
 
 def _delocalize_product_field(field, lang):
     rv = dict(**field)
@@ -30,17 +38,13 @@ def _localize_product_fields(fields, lang):
         if field.get('localized'):
             field['value'] = {lang: field['value']}
 
-from .images import img_aspect_ratios
-
-from .validation.products import (add_product, edit_product, edit_product_members)
-
 def _products_query(domain_id, **params):
     q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
     q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
     return q
 
 @route('/products', expects_params=True, expects_domain=True,
-       authenticate=True, expects_lang=True, readonly=True)
+       authorize=domain_owner_authz, expects_lang=True, readonly=True)
 def get_products(params, domain, lang):
     products = _products_query(domain_id=domain.domain_id).all()
     product_url = url_for('api.get_product', product_id='{product_id}')
@@ -51,7 +55,7 @@ def get_products(params, domain, lang):
     return rv.document, 200, []
 
 @route('/product-resources', expects_params=True, expects_lang=True,
-       expects_domain=True, authenticate=True, readonly=True)
+       expects_domain=True, authorize=domain_owner_authz, readonly=True)
 def get_product_resources(params, domain, lang):
     product_ids = params.getlist('pid')
     q = Product.query.filter_by(domain_id=domain.domain_id)
@@ -100,14 +104,15 @@ def get_product_schema(lang):
                      for f in product_schema['schema']['fields']])
     return rv.document, 200, []
 
-@route('/products/<product_id>/json', authenticate=True, expects_domain=True)
+@route('/products/<product_id>/json', authorize=domain_owner_authz,
+       expects_domain=True)
 def get_product_json(product_id, domain):
     product = _get_product(product_id, domain.domain_id)
     data = json.dumps(product.fields, indent=4)
     return {'json':data}, 200, []
 
-@route('/products/<product_id>/json', methods=['put'], authenticate=True,
-       expects_domain=True, expects_data=True)
+@route('/products/<product_id>/json', methods=['put'],expects_domain=True,
+       expects_data=True, authorize=domain_owner_authz,)
 def put_product_json(product_id, domain, data):
     product = _get_product(product_id, domain.domain_id)
     product.fields = data
@@ -124,8 +129,8 @@ def _get_product(product_id, domain_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
-@route('/products/<product_id>', authenticate=True, expects_domain=True,
-       expects_params=True, expects_lang=True)
+@route('/products/<product_id>', authorize=domain_owner_authz,
+       expects_domain=True, expects_params=True, expects_lang=True)
 def get_product(product_id, domain, params, lang):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
@@ -231,7 +236,8 @@ def post_product(data, lang):
     populate_product(p, data, lang)
     db.session.add(p)
     db_flush()
-    location = url_for('api.get_product', product_id=p.product_id, partial=False)
+    location = url_for(
+        'api.get_product', product_id=p.product_id, partial=False)
     rv = hal()
     rv._l('location', location)
     rv._k('product_id', p.product_id)
@@ -240,7 +246,7 @@ def post_product(data, lang):
 
 
 @route('/products/<product_id>', methods=['PUT'], expects_data=True,
-       authenticate=True, expects_domain=True, expects_lang=True)
+       authorize=domain_owner_authz, expects_domain=True, expects_lang=True)
 def put_product(product_id, data, domain, lang):
     data = edit_product.validate(data)
     p = _get_product(product_id, domain.domain_id)
@@ -249,9 +255,8 @@ def put_product(product_id, data, domain, lang):
     db_flush()
     return {}, 200, []
 
-@route('/products/<product_id>/groups',
-       methods=['PUT'], expects_domain=True, expects_data=True,
-       authenticate=True)
+@route('/products/<product_id>/groups', methods=['PUT'], expects_domain=True,
+       expects_data=True, authorize=domain_owner_authz)
 def put_product_groups(product_id, data, domain):
     #TODO: validation
     groups = data.get('groups') or  []
@@ -264,7 +269,7 @@ def put_product_groups(product_id, data, domain):
     return {}, 200, []
 
 @route('/products/details', expects_params=True, expects_domain=True,
-       authenticate=True, expects_lang=True)
+       authorize=domain_owner_authz, expects_lang=True)
 def get_product_details(domain, lang, params):
     #TODO: validate params
     product_ids = params.getlist('pid')
@@ -325,7 +330,7 @@ def update_group_options(product_id, groups, domain_id):
 For a data to be patched to the product, it must already be present. 
 """
 @route('/products/<product_id>', methods=['PATCH'], expects_data=True,
-       expects_domain=True, expects_lang=True, authenticate=True)
+       expects_domain=True, expects_lang=True, authorize=domain_owner_authz)
 def patch_product(product_id, data, domain, lang):
     #TODO: validation
     #data = edit_product_members.validate(data)
