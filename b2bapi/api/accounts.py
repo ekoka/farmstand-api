@@ -347,7 +347,7 @@ def _get_account_resource(account, lang, partial=False):
     return rv.document
 
 @route('/accounts/<account_id>', methods=['PUT'], domained=False,
-       authenticate=True, expects_data=True, expects_lang=True)
+       authorize=account_owner_authz, expects_data=True, expects_lang=True)
 def put_account(account_id, data, lang):
     #TODO: data validation
     data = val.edit_account.validate(data)
