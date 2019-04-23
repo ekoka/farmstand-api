@@ -4,10 +4,14 @@ from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
 
-from b2bapi.db.models.domains import Domain
+from b2bapi.db.models.domains import Domain, DomainAccount
 from b2bapi.db.models.billing import Plan
 from b2bapi.db import db
-from ._route import route, url_for, json_abort, hal
+from ._route import (
+    route, url_for, json_abort, hal,
+    domain_owner_authorization as domain_owner_authz,
+    account_owner_authorization as account_owner_authz,
+)
 from b2bapi.db.models.reserved_names import reserved_names
 from .utils import localize_data, delocalize_data, StripeContext
 
@@ -20,6 +24,7 @@ def _get_plan(plan_id):
         json_abort(404, {'error': 'Plan not found'})
 
 
+# the expects_account directive also implies authenticate
 @route('/domains', methods=['POST'], domained=False, expects_data=True, 
        expects_account=True, expects_lang=True)
 def post_domain(data, account, lang):
@@ -133,7 +138,8 @@ def _subscription_data(subscription):
     return rv
 
 
-@route('/domains', expects_account=True, domained=False, expects_lang=True)
+@route('/domains', expects_account=True, domained=False, expects_lang=True,
+       authorize=account_owner_authz)
 def get_domains(account, lang):
     rv = hal()
     rv._l('self', url_for('api.get_domains'))
@@ -189,14 +195,18 @@ def _get_domain(domain_name):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error_code': 404, 'error': 'Domain not found'})
 
-@route('/domain/<domain_name>', domained=False, authenticate=True, 
-       expects_lang=True, )
+def _check_domain_ownership(account, domain_name):
+    domain = _get_domain(domain_name=domain_name)   
+    return domain.owner_account_id==account.account_id
+
+@route('/domain/<domain_name>', domained=False, expects_lang=True,
+       authorize=_check_domain_ownership,)
 def get_domain(domain_name, lang):
     domain = _get_domain(domain_name=domain_name)
     return _get_domain_resource(domain, lang), 200, []
 
-@route('/domain/<domain_name>', methods=['put'], domained=False, authenticate=True, 
-       expects_lang=True, expects_data=True)
+@route('/domain/<domain_name>', methods=['put'], domained=False,
+       authorize=_check_domain_ownership, expects_lang=True, expects_data=True)
 def put_domain(domain_name, data, lang):
     # TODO: validation
     domain = _get_domain(domain_name=domain_name)
@@ -230,3 +240,65 @@ def get_domain_name_check(params):
         return {}, 200, []
     except orm_exc.NoResultFound as e:
         return {}, 404, []
+
+def _get_domain_account(domain_id, account_id):
+    try: 
+        rv = DomainAccount.query.filter_by(
+            domain_id=domain_id, account_id=account_id).one()
+    except orm_exc.NoResultFound: 
+        rv = DomainAccount(domain_id=domain_id, account_id=account_id)
+        db.session.add(rv)
+        db.session.flush()
+    return rv
+
+
+@route('/accounts', methods=['POST'], expects_data=True, expects_domain=True,
+       authorize=domain_owner_authz)
+def post_domain_account(data, domain):
+    # TODO validation
+    # TODO: add a routine for user to approve the domain they're being added to
+    try:
+        da = _get_domain_account(
+            domain_id=domain.domain_id, account_id=data['account_id'])
+        da.active = True
+        db.session.flush()
+    except:
+        db.session.rollback()
+    return {}, 200, []
+
+@route('/accounts/<account_id>', expects_domain=True, methods=['DELETE'],
+       authorize=domain_owner_authz)
+def delete_domain_account(account_id, domain):
+    try:
+        da = _get_domain_account(
+            domain_id=domain.domain_id, account_id=account_id)
+        da.active = False
+    except:
+        db.session.rollback()
+    return {}, 200, []
+
+@route('/accounts', expects_domain=True, authorize=domain_owner_authz,
+       expects_params=True)
+def get_domain_accounts(domain, params):
+    q = DomainAccount.query.filter_by(domain_id=domain.domain_id)
+    if params.get('active'):
+        q = q.filter_by(active=params['active'])
+    accounts = q.all()
+    rv = hal()
+    rv._l('self', url_for('api.get_domain_accounts'))
+    for a in accounts:
+    rv._embed('accounts', [_get_domain_account_resource(a) for a in accounts])
+
+    return rv.document, 200, []
+
+@route('/accounts/<account_id>', expects_domain=True,
+       authorize=domain_owner_authz)
+def get_domain_account(domain, account_id):
+    account = _get_domain_account(
+        domain_id=domain.domain_id, account_id=account_id)
+    rv = _get_domain_account_resource(account)
+    return rv, 200, []
+
+def _get_domain_account_resource(domain_account):
+    resource = hal()
+    return resource.document
