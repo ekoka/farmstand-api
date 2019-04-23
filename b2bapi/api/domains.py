@@ -286,7 +286,6 @@ def get_domain_accounts(domain, params):
     accounts = q.all()
     rv = hal()
     rv._l('self', url_for('api.get_domain_accounts'))
-    for a in accounts:
     rv._embed('accounts', [_get_domain_account_resource(a) for a in accounts])
 
     return rv.document, 200, []
