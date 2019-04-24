@@ -1,15 +1,17 @@
+import jwt
 import secrets
-from flask import g, abort, current_app as app, jsonify, url_for
+from flask import g, abort, current_app as app, jsonify, url_for, request
 import stripe
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from urllib import parse
 
 from b2bapi.db.models.accounts import (
     Account, AccountEmail, AccountAccessKey, Signin) #, Profile)
+from b2bapi.db.models.domains import Domain
 from b2bapi.db import db
 from .domains import _get_domain_resource
 from b2bapi.utils.uuid import clean_uuid
@@ -49,8 +51,42 @@ def _verify_password_token(data):
         return {'email': data['email']}
 
 
-@route('/access-token', methods=['POST'], domained=False, expects_data=True,)
-def post_access_token(data):
+#@route('/access-token', methods=['POST'], domained=False, expects_data=True,)
+#def post_access_token(data):
+#    token_data = _verify_auth_token(data)
+#    if not token_data:
+#        json_abort(401, {'error': 'Not authorized'})
+#
+#    email = AccountEmail.query.filter_by(
+#        email=token_data.get('email'), login=True).first()
+#
+#    if not email:
+#        json_abort(401, {'error': 'Not authorized'})
+#
+#    # if we got here it means we have indeed verified the token's email
+#    # let's update our account's email 
+#    email.verified = True
+#    email.account.confirmed = True
+#    db.session.flush()
+#
+#    access_key = AccountAccessKey(
+#        key=generate_key(24), account_id=email.account_id)
+#
+#    db.session.add(access_key)
+#    db.session.flush()
+#
+#    rv = hal()
+#    rv._l('self', url_for('api.post_access_token'))
+#    rv._l('productlist:account', url_for(
+#          'api.get_account', account_id=access_key.account_id))
+#    rv._k('access_token', access_key.key)
+#    # when setting cookie access token
+#    # g.access_key = access_key.key
+#    return rv.document, 200, []
+
+
+@route('/refresh-token', methods=['POST'], domained=False, expects_data=True)
+def post_id_token(data):
     token_data = _verify_auth_token(data)
     if not token_data:
         json_abort(401, {'error': 'Not authorized'})
@@ -60,26 +96,71 @@ def post_access_token(data):
 
     if not email:
         json_abort(401, {'error': 'Not authorized'})
+    account = email.account
 
     # if we got here it means we have indeed verified the token's email
     # let's update our account's email 
     email.verified = True
-    email.account.confirmed = True
+    account.confirmed = True
+    if not account.id_token:
+        account.id_token = generate_key(24)
     db.session.flush()
 
-    access_key = AccountAccessKey(
-        key=generate_key(24), account_id=email.account_id)
-
-    db.session.add(access_key)
-    db.session.flush()
 
     rv = hal()
     rv._l('self', url_for('api.post_access_token'))
     rv._l('productlist:account', url_for(
-          'api.get_account', account_id=access_key.account_id))
-    rv._k('access_token', access_key.key)
-    # when setting cookie access token
-    # g.access_key = access_key.key
+        'api.get_account', account_id=account.account_id))
+    rv._k('id_token', account.id_token)
+    return rv.document, 200, []
+
+
+def generate_token(payload):
+    signature = app.config['SECRET_KEY']
+    algorithm = 'HS256'
+    exp = 3600 # in seconds
+    payload.setdefault('exp', datetime.utcnow() + timedelta(seconds=exp))
+    jwt_token = jwt.encode(payload, signature, algorithm).decode('utf-8')
+    return jwt_token
+
+def id_token_authentication(**kw):
+    scheme, credentials = request.headers['authorization'].split(' ')
+    if scheme.lower()!='bearer':
+        return False
+    try:
+        g.current_account = Account.query.filter_by(id_token=credential).one()
+        return True
+    except:
+        return False
+
+@route('/access-token', methods=['POST'], domained=False, expects_data=True,
+       authenticate=id_token_authentication, expects_account=True)
+def post_access_token(data, account):
+    # default role for account is admin
+    role = 'admin'
+    # is user making claim on a domain
+    domain_name = data.get('domain')
+    if domain_name:
+        try:
+            domain = Domain.query.filter_by(name=domain_name)
+            domain_account = _get_domain_account(
+                domain_id=domain.domain_id, account_id=account.account_id)
+            if not domain_account.active:
+                raise Exception()
+            role = domain_account.role or 'user'
+        except:
+            json_abort(400, {'error': 'Not authorized.'})
+
+    payload = {
+        'account_id': account.account_id,
+        'email': account.email,
+        'role': role,
+        'domain': domain,
+    }
+    token = generate_token(payload)
+    rv = hal()
+    rv._l('self', url_for('api.post_access_token'))
+    rv._k('token', token)
     return rv.document, 200, []
 
 
@@ -140,7 +221,7 @@ def post_account(data):
         json_abort(400, {'error': 'Invalid token'})
 
     try:
-        # create account, account_email and access_key
+        # create account, account_email and id_token
         account = create_account_from_token(token_data)
     except sql_exc.IntegrityError as e:
         json_abort(409, {'error': 'Account already exists'})
@@ -227,7 +308,12 @@ def create_account_from_token(data):
     
     account = Account(**data)
 
-    #account.password = data['password']
+    while True:
+        id_token = generate_key(24)
+        exists = Account.query.filter_by(id_token=id_token).first()
+        if exists: continue
+        account.id_token = id_token
+        break
 
     email = AccountEmail(**{
         'email': account.email,
@@ -238,11 +324,6 @@ def create_account_from_token(data):
         'login': True, 
     })
 
-    #access_key = AccountAccessKey(**{
-    #    'key': generate_key(24),
-    #})
-
-    #account.access_key = access_key
     email.account = account
 
     try:

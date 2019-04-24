@@ -17,7 +17,8 @@ class Domain(db.Billable):
 
     __mapper_args__ = dict(polymorphic_identity='domains')
 
-    def default_meta(self):
+    @staticmethod
+    def default_meta():
         return {
             'privacy': 'private',
             'access_approval': 'explicit',
@@ -34,7 +35,7 @@ class DomainAccount(db.Model):
     account_id = db.Column(None, db.ForeignKey(
         'accounts.account_id', ondelete='cascade'), primary_key=True)
     active = db.Column(db.Boolean, default=False)
-    role = db.Column(db.Unicode, nullable=False, default='buyer')
+    role = db.Column(db.Unicode, nullable=False, default='user')
 
     domain = db.relationship(Domain, backref='accounts')
     account = db.relationship('Account', backref='domains')
