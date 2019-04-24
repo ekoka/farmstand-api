@@ -9,12 +9,21 @@ class Domain(db.Billable):
     name = db.Column(db.Unicode, unique=True)
     creation_date = db.Column(db.DateTime, default=dtm.utcnow)
     data = db.Column(db.JSONB, default=dict)
+    privacy_level = db.Column(db.Unicode, default='public')
     meta = db.Column(db.JSONB, default=dict)
     # see additional fields in Billable model
 
     localized_fields = ['label', 'description']
 
     __mapper_args__ = dict(polymorphic_identity='domains')
+
+    def default_meta(self):
+        return {
+            'privacy': 'private',
+            'access_approval': 'explicit',
+            'languages': ['en'],
+        }
+
 
 
 class DomainAccount(db.Model):

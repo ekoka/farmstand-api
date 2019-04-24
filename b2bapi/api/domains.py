@@ -69,13 +69,10 @@ def post_domain(data, account, lang):
         if data.get('data'):
             domain.data = localize_data(
                 data['data'], Domain.localized_fields, lang)
-
-        # enable domain
-        domain.active = True
-
-
+        domain.meta = data.get('meta') or Domain.default_meta
         db.session.flush()
 
+        # stripe's metadata
         metadata = {
             'domain_id': domain.domain_id,
             'domain_nickname': domain.name,
@@ -95,6 +92,7 @@ def post_domain(data, account, lang):
         # link stripe data to local billable
         domain.subscription_id = subscription.id
         domain.subscription_data = subscription
+        db.session.flush()
 
     rv = hal()
 
