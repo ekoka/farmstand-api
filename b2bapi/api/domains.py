@@ -14,8 +14,7 @@ from ._route import (
 )
 from b2bapi.db.models.reserved_names import reserved_names
 from .utils import localize_data, delocalize_data, StripeContext
-
-
+from .accounts import _get_account
 
 def _get_plan(plan_id):
     try:
@@ -23,11 +22,11 @@ def _get_plan(plan_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Plan not found'})
 
-
-# the expects_account directive also implies authenticate
+# the expects_access_token directive also implies authenticate
 @route('/domains', methods=['POST'], domained=False, expects_data=True, 
-       expects_account=True, expects_lang=True)
-def post_domain(data, account, lang):
+       expects_access_token=True, expects_lang=True)
+def post_domain(data, access_token, lang):
+    account = _get_account(access_token['account_id'])
     # TODO: validation
     try:
         name = data.pop('name')
@@ -92,6 +91,13 @@ def post_domain(data, account, lang):
         # link stripe data to local billable
         domain.subscription_id = subscription.id
         domain.subscription_data = subscription
+
+        # also add a domain_accounts record for owner
+        da = _set_domain_account(
+            domain_id=domain.domain_id, account_id=account.account_id)
+        da.role = 'admin'
+        da.active = True
+
         db.session.flush()
 
     rv = hal()
@@ -136,9 +142,10 @@ def _subscription_data(subscription):
     return rv
 
 
-@route('/domains', expects_account=True, domained=False, expects_lang=True,
+@route('/domains', expects_access_token=True, domained=False, expects_lang=True,
        authorize=account_owner_authz)
-def get_domains(account, lang):
+def get_domains(access_token, lang):
+    account = _get_account(access_token['account_id'])
     rv = hal()
     rv._l('self', url_for('api.get_domains'))
     rv._embed('domains', [_get_domain_resource(b, lang)
@@ -193,9 +200,15 @@ def _get_domain(domain_name):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error_code': 404, 'error': 'Domain not found'})
 
-def _check_domain_ownership(account, domain_name):
-    domain = _get_domain(domain_name=domain_name)   
-    return domain.owner_account_id==account.account_id
+def _check_domain_ownership(domain_name, **kw):
+    account = _get_account(g.access_token['account_id'])
+    try:
+        domain = Domain.query.filter_by(name=domain_name).one()
+    except orm_exc.NoResultFound, orm_exc.MultipleResultsFound:
+        json_abort(404, {'error': 'Domain not found.'})
+    domain_account = _get_domain_account(
+        domain_id=domain.domain_id, account_id=g.access_token['account_id'])
+    return domain_account.active and domain_account.role=='admin'
 
 @route('/domain/<domain_name>', domained=False, expects_lang=True,
        authorize=_check_domain_ownership,)
@@ -226,8 +239,6 @@ def put_domain(domain_name, data, lang):
     db.session.flush()
     return {}, 200, []
 
-
-
 @route('/domain-name-check', domained=False, expects_params=True)
 def get_domain_name_check(params):
     name = params.get('q')
@@ -240,15 +251,17 @@ def get_domain_name_check(params):
         return {}, 404, []
 
 def _get_domain_account(domain_id, account_id):
-    try: 
-        rv = DomainAccount.query.filter_by(
-            domain_id=domain_id, account_id=account_id).one()
+    return DomainAccount.query.filter_by(
+        domain_id=domain_id, account_id=account_id).one()
+
+def _set_domain_account(domain_id, account_id):
+    try:
+        return _get_domain_account(domain_id, account_id)
     except orm_exc.NoResultFound: 
         rv = DomainAccount(domain_id=domain_id, account_id=account_id)
         db.session.add(rv)
         db.session.flush()
-    return rv
-
+        return rv
 
 @route('/accounts', methods=['POST'], expects_data=True, expects_domain=True,
        authorize=domain_owner_authz)
@@ -256,9 +269,10 @@ def post_domain_account(data, domain):
     # TODO validation
     # TODO: add a routine for user to approve the domain they're being added to
     try:
-        da = _get_domain_account(
+        da = _set_domain_account(
             domain_id=domain.domain_id, account_id=data['account_id'])
         da.active = True
+        da.role = data.get('role', 'user')
         db.session.flush()
     except:
         db.session.rollback()
@@ -271,7 +285,7 @@ def delete_domain_account(account_id, domain):
         da = _get_domain_account(
             domain_id=domain.domain_id, account_id=account_id)
         da.active = False
-    except:
+    except orm_exc.NoResultFound: 
         db.session.rollback()
     return {}, 200, []
 
@@ -291,10 +305,13 @@ def get_domain_accounts(domain, params):
 @route('/accounts/<account_id>', expects_domain=True,
        authorize=domain_owner_authz)
 def get_domain_account(domain, account_id):
-    account = _get_domain_account(
-        domain_id=domain.domain_id, account_id=account_id)
-    rv = _get_domain_account_resource(account)
-    return rv, 200, []
+    try:
+        account = _get_domain_account(
+            domain_id=domain.domain_id, account_id=account_id)
+        rv = _get_domain_account_resource(account)
+        return rv, 200, []
+    except orm.NoResultFound:
+        json_abort(404, {'error': 'Account not found'})
 
 def _get_domain_account_resource(domain_account):
     resource = hal()

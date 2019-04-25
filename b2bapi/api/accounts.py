@@ -165,8 +165,8 @@ def post_access_token(data, account):
 
 
 @route('/profile', methods=['GET'], domained=False, authenticate=True, 
-       expects_account=True)
-def get_profile(account):
+       expects_access_token=True)
+def get_profile(access_token):
     """
     The difference between this resource and `account` is that this
     one returns the authenticated user's profile, whereas `account` returns
@@ -178,8 +178,8 @@ def get_profile(account):
     rv = hal()
     rv._l('self', url_for('api.get_profile'))
     rv._l('productlist:account', url_for(
-        'api.get_account', account_id=account.account_id))
-    rv._k('account_id', account.account_id)
+        'api.get_account', account_id=access_token['account_id']))
+    rv._k('account_id', access_token['account_id'])
     return rv.document, 200, []
 
 
@@ -386,6 +386,8 @@ def _get_account(account_id):
         return Account.query.filter_by(account_id=account_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Account not found'})
+    except orm_exc.MultipleResultsFound as e:
+        json_abort(404, {'error': 'Ambiguous results.'})
 
 
 @route('/accounts/<account_id>', domained=False, authorize=account_owner_authz,
