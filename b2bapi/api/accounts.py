@@ -13,13 +13,13 @@ from b2bapi.db.models.accounts import (
     Account, AccountEmail, AccountAccessKey, Signin) #, Profile)
 from b2bapi.db.models.domains import Domain
 from b2bapi.db import db
-from .domains import _get_domain_resource
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 from .validation import accounts as val
 from ._route import (
     route, hal, json_abort, domain_owner_authorization as domain_owner_authz,
     account_owner_authorization as account_owner_authz,
+    api_url,
 )
 from .utils import localize_data, delocalize_data
 
@@ -85,7 +85,7 @@ def _verify_password_token(data):
 #    return rv.document, 200, []
 
 
-@route('/refresh-token', methods=['POST'], domained=False, expects_data=True)
+@route('/id-token', methods=['POST'], domained=False, expects_data=True)
 def post_id_token(data):
     token_data = _verify_auth_token(data)
     if not token_data:
@@ -108,10 +108,10 @@ def post_id_token(data):
 
 
     rv = hal()
-    rv._l('self', url_for('api.post_access_token'))
-    rv._l('productlist:account', url_for(
+    rv._l('self', api_url('api.post_id_token'))
+    rv._l('productlist:account', api_url(
         'api.get_account', account_id=account.account_id))
-    rv._k('id_token', account.id_token)
+    rv._k('token', account.id_token)
     return rv.document, 200, []
 
 
@@ -125,12 +125,14 @@ def generate_token(payload):
 
 def id_token_authentication(**kw):
     scheme, credentials = request.headers['authorization'].split(' ')
+    app.logger.info(scheme)
+    app.logger.info(credentials)
     if scheme.lower()!='bearer':
         return False
     try:
-        g.current_account = Account.query.filter_by(id_token=credential).one()
+        g.current_account = Account.query.filter_by(id_token=credentials).one()
         return True
-    except:
+    except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
         return False
 
 @route('/access-token', methods=['POST'], domained=False, expects_data=True,
@@ -142,24 +144,27 @@ def post_access_token(data, account):
     domain_name = data.get('domain')
     if domain_name:
         try:
-            domain = Domain.query.filter_by(name=domain_name)
+            from .domains import _get_domain_account
+            domain = Domain.query.filter_by(name=domain_name).one()
             domain_account = _get_domain_account(
                 domain_id=domain.domain_id, account_id=account.account_id)
             if not domain_account.active:
                 raise Exception()
             role = domain_account.role or 'user'
         except:
-            json_abort(400, {'error': 'Not authorized.'})
+            json_abort(401, {'error': 'Not authorized.'})
 
     payload = {
-        'account_id': account.account_id,
+        'account_id': clean_uuid(account.account_id),
+        'account_url': api_url(
+            'api.get_account', account_id=clean_uuid(account.account_id)),
         'email': account.email,
         'role': role,
-        'domain': domain,
+        'domain': domain_name,
     }
     token = generate_token(payload)
     rv = hal()
-    rv._l('self', url_for('api.post_access_token'))
+    rv._l('self', api_url('api.post_access_token'))
     rv._k('token', token)
     return rv.document, 200, []
 
@@ -176,8 +181,8 @@ def get_profile(access_token):
     resource.
     """
     rv = hal()
-    rv._l('self', url_for('api.get_profile'))
-    rv._l('productlist:account', url_for(
+    rv._l('self', api_url('api.get_profile'))
+    rv._l('productlist:account', api_url(
         'api.get_account', account_id=access_token['account_id']))
     rv._k('account_id', access_token['account_id'])
     return rv.document, 200, []
@@ -227,8 +232,8 @@ def post_account(data):
         json_abort(409, {'error': 'Account already exists'})
 
     rv = hal()
-    rv._l('location', url_for('api.get_account', account_id=account.account_id))
-    rv._l('productlist:access_token', url_for('api.post_access_token'))
+    rv._l('location', api_url('api.get_account', account_id=account.account_id))
+    rv._l('productlist:access_token', api_url('api.post_access_token'))
     return rv.document, 201, []
 
 
@@ -393,7 +398,7 @@ def _get_account(account_id):
 @route('/accounts/<account_id>', domained=False, authorize=account_owner_authz,
        expects_lang=True)
 def get_account(account_id, lang):
-    self = url_for('api.get_account', account_id=account_id)
+    self = api_url('api.get_account', account_id=account_id)
     a = _get_account(account_id)
     return _get_account_resource(a, lang=lang), 200, []
 
@@ -401,11 +406,11 @@ def get_account(account_id, lang):
 def _get_account_resource(account, lang, partial=False):
     a = account
     rv = hal()
-    rv._l('self', url_for('api.get_account', account_id=account.account_id))
-    rv._l('domains', url_for('api.get_domains'))
-    rv._l('payment_sources', url_for('api.post_payment_source'))
+    rv._l('self', api_url('api.get_account', account_id=account.account_id))
+    rv._l('domains', api_url('api.get_domains'))
+    rv._l('payment_sources', api_url('api.post_payment_source'))
 
-    rv._l('payment_source', url_for(
+    rv._l('payment_source', api_url(
         'api.delete_payment_source', source_id='{source_id}'), templated=True,
         unquote=True)
     # TODO maybe namespace domains url with acccount_id
@@ -414,11 +419,11 @@ def _get_account_resource(account, lang, partial=False):
     rv._k('first_name', account.first_name)
     rv._k('last_name', account.last_name)
 
-    domains = [_get_domain_resource(domain.domain, partial=True) 
+    from .domains import _get_domain_resource
+    domains = [_get_domain_resource(domain.domain, lang, partial=True) 
                for domain in account.domains]
     rv._k('roles', {d.domain.name:d.role for d in account.domains})
-    rv._embed('domains', [_get_domain_resource(domain.domain, partial=True)
-                          for domain in account.domains])
+    rv._embed('domains', domains)
 
     rv._k('data', delocalize_data(
         account.data, Account.localized_fields, lang))

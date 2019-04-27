@@ -18,6 +18,7 @@ class Account(db.Model):
     _password = db.Column('password', db.Unicode)
     lang = db.Column(db.Unicode, default='en')
     data = db.Column(db.JSONB, default=dict)
+    id_token = db.Column(db.Unicode, unique=True, nullable=True)
     confirmed = db.Column(db.Boolean, default=False)
 
     # these fields should be localized in the `data` json 
@@ -39,6 +40,21 @@ class Account(db.Model):
         except AttributeError:
             return False
 
+    def authorize(self, domain, action, **kw):
+        if action is True: # basic authz
+            return self.account_id==domain.owner_account_id
+
+        if callable(action):
+            return action(domain, self)
+
+    def authorization(fnc, roles):
+        @functools.wraps(fnc)
+        def wrapper(*a, **kw):
+            authorized = app.config.get('DEV_MODE', False)
+            # if a resource must go through authorization a current_account should
+            # be present in g.
+            acc = g.current_account
+            authorized = acc.authorize(g.domain, roles, **kw) or authorized
 
 class PaymentSource(db.Model):
     __tablename__ = 'payment_sources'

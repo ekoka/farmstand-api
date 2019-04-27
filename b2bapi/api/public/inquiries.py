@@ -9,7 +9,7 @@ from vino import errors as vno_err
 from b2bapi.db import db
 from b2bapi.db.models.inquiries import Inquiry, InquiryProduct
 from b2bapi.utils.uuid import clean_uuid
-from .._route import route, json_abort, hal
+from .._route import route, json_abort, hal, api_url
 
 
 @route('/public/inquiries', methods=['POST'], expects_data=True, 

@@ -12,19 +12,20 @@ from b2bapi.db.models.groups import (
     Group, GroupOption, ProductGroupOption)
 from ._route import (
     route, hal, json_abort, domain_owner_authorization as domain_owner_authz,
-    account_owner_authorization as account_owner_authz,
+    api_url,
 )
 from .product_utils import _localize_data, _merge_localized_data, _delocalize_data
+from .accounts import _get_account
 
-@route('/groups', expects_domain=True, expects_lang=True, 
+@route('/groups', expects_domain=True, expects_lang=True,
        authorize=domain_owner_authz)
 def get_groups(lang, domain):
     groups = Group.query.filter_by(domain_id=domain.domain_id).all()
     rv = hal()
-    rv._l('self', url_for('api.get_groups'))
-    rv._l('productlist:group', url_for('api.get_group', group_id='{group_id}'),
+    rv._l('self', api_url('api.get_groups'))
+    rv._l('productlist:group', api_url('api.get_group', group_id='{group_id}'),
                             templated=True, unquote=True)
-    rv._l('productlist:group_resources', url_for('api.get_group_resources'))
+    rv._l('productlist:group_resources', api_url('api.get_group_resources'))
     rv._k('group_ids', [g.group_id for g in groups])
     return rv.document, 200, []
 
@@ -38,7 +39,7 @@ def get_group_resources(params, domain, lang):
         q = q.filter(Group.group_id.in_(group_ids))
     groups = q.all()
     rv = hal()
-    rv._l('self', url_for('api.get_group_resources'))
+    rv._l('self', api_url('api.get_group_resources'))
     rv._k('group_ids', [g.group_id for g in groups])
     rv._embed('groups', [_group_resource(g, lang) for g in groups])
     return rv.document, 200, []
@@ -66,7 +67,7 @@ def post_group(data, lang, domain):
     if data.get('options'):
         _sync_options(g, data['options'], lang, domain.domain_id)
     rv = hal()
-    location = url_for('api.get_group', group_id=g.group_id)
+    location = api_url('api.get_group', group_id=g.group_id)
     rv._l('location', location)
     rv._k('group_id', g.group_id)
     return rv.document, 201, [('Location', location)]
@@ -162,9 +163,9 @@ def _get_group(group_id, domain_id):
 
 def _group_resource(g, lang,):
     rv = hal()
-    rv._l('self', url_for('api.get_group', group_id=g.group_id))
-    rv._l('options', url_for('api.post_group_option', group_id=g.group_id))
-    rv._l('option', url_for('api.get_group_option', group_id=g.group_id,
+    rv._l('self', api_url('api.get_group', group_id=g.group_id))
+    rv._l('options', api_url('api.post_group_option', group_id=g.group_id))
+    rv._l('option', api_url('api.get_group_option', group_id=g.group_id,
                             group_option_id='{group_option_id}'),
                             templated=True, unquote=True)
     rv._k('group_id', g.group_id)
@@ -201,13 +202,13 @@ def delete_group(group_id, domain):
 def _group_option_resource(group_option, lang):
     f_o = group_option
     rv = hal()
-    rv._l('self', url_for('api.get_group_option', group_id=f_o.group_id,
+    rv._l('self', api_url('api.get_group_option', group_id=f_o.group_id,
                           group_option_id=f_o.group_option_id))
-    rv._l('products', url_for(
+    rv._l('products', api_url(
         'api.put_group_option_products', group_id=f_o.group_id,
         group_option_id=f_o.group_option_id))
     #if not partial:
-    #    rv._l('group', url_for('api.get_group', group_id=f_o.group_id))
+    #    rv._l('group', api_url('api.get_group', group_id=f_o.group_id))
     rv._k('group_option_id', f_o.group_option_id)
     rv._k('data', _delocalize_data(f_o.data, ['label'], lang))
     rv._k('products', [p.product_id for p in group_option.products])
@@ -227,7 +228,7 @@ def post_group_option(group_id, data, lang, domain):
         db.session.rollback()
         json_abort(400, {'error': 'Bad format'})
     rv = hal()
-    location = url_for('api.get_group_option', group_id=group_id, 
+    location = api_url('api.get_group_option', group_id=group_id, 
                        group_option_id=f_o.group_option_id)
     rv._l('location', location)
 

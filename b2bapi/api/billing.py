@@ -11,7 +11,7 @@ from b2bapi.db.models.billing import Plan, Billable
 from b2bapi.db.models.accounts import PaymentSource
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
-from ._route import route, url_for, json_abort, hal
+from ._route import route, api_url, json_abort, hal
 from b2bapi.db.models.reserved_names import reserved_names
 from .utils import localize_data, delocalize_data, StripeContext
 
@@ -19,7 +19,7 @@ from .accounts import _get_account
 
 def _plan_resource(p, lang):
     rv = hal()
-    rv._l('self', url_for('api.get_plan', plan_id=p.plan_id))
+    rv._l('self', api_url('api.get_plan', plan_id=p.plan_id))
     rv._k('plan_id', p.plan_id)
     rv._k('data', p.data)
     #rv._k('name', p.name)
@@ -42,7 +42,7 @@ def get_plans(params, lang):
     plans = Plan.query.all()
     plans = sorted(plans, key= lambda p: p.data.get('amount', 0))
     rv = hal()
-    rv._l('self', url_for('api.get_plans'))
+    rv._l('self', api_url('api.get_plans'))
     rv._embed('plans', [_plan_resource(p, lang) for p in plans])
     return rv.document, 200, []
 
@@ -54,7 +54,7 @@ def get_usage(access_token, year, month):
     # get all periods usage and associated charges
 
     rv = hal()
-    rv._link('self', url_for('api.get_usage'))
+    rv._link('self', api_url('api.get_usage'))
 
 @route('/payment-sources', methods=['POST'], authenticate=True,
        expects_access_token=True, domained=False, expects_data=True)
@@ -83,8 +83,8 @@ def get_payment_sources(access_token):
     sources = PaymentSource.query.filter_by(
         account_id=access_token['account_id']).all()
     rv = hal()
-    rv._l('self', url_for('api.get_payment_sources'))
-    rv._l('payment_source', url_for(
+    rv._l('self', api_url('api.get_payment_sources'))
+    rv._l('payment_source', api_url(
         'api.delete_payment_source', source_id='{source_id}'), templated=True,
         unquote=True)
     rv._k('sources', [_get_source_data(s) for s in sources])

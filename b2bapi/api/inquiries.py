@@ -9,7 +9,7 @@ from vino import errors as vno_err
 from b2bapi.db import db
 from b2bapi.db.models.inquiries import Inquiry, InquiryProduct
 from b2bapi.utils.uuid import clean_uuid
-from ._route import route, json_abort, hal
+from ._route import route, json_abort, hal, api_url
 
 
 @route('/inquiries', expects_domain=True, authenticate=True)
@@ -20,9 +20,9 @@ def get_inquiries(domain):
     #    filters = json.loads(params['filters'])
     #    q = filtered_query(q, [(k,v) for k,v in filters.iteritems()])
     inquiries = q.all()
-    inquiry_url = url_for('api.get_inquiry', inquiry_id='{inquiry_id}')
+    inquiry_url = api_url('api.get_inquiry', inquiry_id='{inquiry_id}')
     rv = hal()
-    rv._l('self', url_for('api.get_inquiries'))
+    rv._l('self', api_url('api.get_inquiries'))
     rv._l('find', inquiry_url, unquote=True, templated=True)
 
     rv._embed('items', [_get_inquiry_resource(i, partial=True) 
@@ -31,7 +31,7 @@ def get_inquiries(domain):
 
 def _get_inquiry_resource(i, partial=True):
     rv = hal()
-    rv._l('self', url_for('api.get_inquiry', inquiry_id=i.inquiry_id,
+    rv._l('self', api_url('api.get_inquiry', inquiry_id=i.inquiry_id,
                           partial=partial))
 
     rv._k('status', i.status)

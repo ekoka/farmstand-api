@@ -11,7 +11,7 @@ from b2bapi.db.models.products import Product, ProductSchema as PSchema
 from b2bapi.db.models.groups import Group, GroupOption, ProductGroupOption
 from b2bapi.utils.uuid import clean_uuid
 from .._route import (
-    route, json_abort, hal,
+    route, json_abort, hal, api_url,
     domain_member_authorization as domain_member,
     domain_privacy_control as privacy_control,
 )
@@ -39,7 +39,7 @@ def get_public_groups(domain):
     groups = Group.query.filter_by(domain_id=domain_id, active=True).all()
 
     rv = hal() 
-    rv._l('self', url_for('api.get_public_groups'))
+    rv._l('self', api_url('api.get_public_groups'))
     rv._embed('groups',[
         _get_group_resource(f) for f in  groups 
     ])
@@ -48,7 +48,7 @@ def get_public_groups(domain):
 
 def _get_group_resource(f):
     rv = hal()
-    rv._l('self', url_for(
+    rv._l('self', api_url(
         'api.get_public_group', group_id=f.group_id))
     rv._k('group_id', f.group_id)
     rv._k('label', f.data.setdefault('label', {'en':None}).get('en'))
@@ -82,9 +82,9 @@ def get_public_products(params, domain):
         
     products = q.all()
 
-    product_url = url_for('api.get_public_product', product_id='{product_id}')
+    product_url = api_url('api.get_public_product', product_id='{product_id}')
     rv = hal()
-    rv._l('self', url_for('api.get_public_products',**params))
+    rv._l('self', api_url('api.get_public_products',**params))
     rv._l('productlist:product', product_url, unquote=True, templated=True)
     rv._k('products', [p.product_id for p in products])
     return rv.document, 200, []
@@ -103,14 +103,14 @@ def get_public_product_resources(params, domain, lang):
     products = q.filter(Product.product_id.in_(product_ids)).all()
 
     rv = hal()
-    rv._l('self', url_for('api.get_product_resources'))
+    rv._l('self', api_url('api.get_product_resources'))
     rv._k('product_ids', [p.product_id for p in products])
     rv._embed('products', [_get_product_resource(p, lang) for p in products])
     return rv.document, 200, []
     
 def _get_product_resource(p):
     rv = hal()
-    rv._l('self', url_for(
+    rv._l('self', api_url(
         'api.get_public_product', product_id=clean_uuid(p.product_id)))
     rv._k('product_id', clean_uuid(p.product_id))
     #rv._k('available', p.available)
@@ -122,9 +122,9 @@ def _get_product_resource(p):
 
 def _get_product_resource(p, lang):
     rv = hal()
-    rv._l('self', url_for('api.get_product', product_id=p.product_id))
-    rv._l('images', url_for('api.get_product_images', product_id=p.product_id))
-    rv._l('groups', url_for('api.put_product_groups', product_id=p.product_id))
+    rv._l('self', api_url('api.get_product', product_id=p.product_id))
+    rv._l('images', api_url('api.get_product_images', product_id=p.product_id))
+    rv._l('groups', api_url('api.put_product_groups', product_id=p.product_id))
 
     rv._k('product_id', clean_uuid(p.product_id))
 
@@ -209,7 +209,7 @@ def _set_default_product_schema(domain_id):
 def get_public_product_schema(domain):
     ps = _set_default_product_schema(domain.domain_id)
     rv = hal()
-    rv._l('self', url_for('api.get_public_product_schema'))
+    rv._l('self', api_url('api.get_public_product_schema'))
     for k,v in ps.data.items():
         rv._k(k, v)
     return rv.document, 200, []

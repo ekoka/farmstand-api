@@ -8,7 +8,7 @@ from b2bapi.db.models.domains import Domain, DomainAccount
 from b2bapi.db.models.billing import Plan
 from b2bapi.db import db
 from ._route import (
-    route, url_for, json_abort, hal,
+    route, api_url, json_abort, hal,
     domain_owner_authorization as domain_owner_authz,
     account_owner_authorization as account_owner_authz,
 )
@@ -102,7 +102,7 @@ def post_domain(data, access_token, lang):
 
     rv = hal()
 
-    domain_url = url_for('api.get_domain', domain_name=domain.name)
+    domain_url = api_url('api.get_domain', domain_name=domain.name)
     rv._l('location', domain_url)
     rv._k('domain_name', domain.name)
     return rv.document, 201, [('Location', domain_url)]
@@ -147,31 +147,31 @@ def _subscription_data(subscription):
 def get_domains(access_token, lang):
     account = _get_account(access_token['account_id'])
     rv = hal()
-    rv._l('self', url_for('api.get_domains'))
+    rv._l('self', api_url('api.get_domains'))
     rv._embed('domains', [_get_domain_resource(b, lang)
                           for b in account.billables 
                           if b.plan.plan_type=='domains'])
     return rv.document, 200, []
 
 def _get_domain_resource(domain, lang, partial=False):
-    domain_url = url_for('api.get_domain', domain_name=domain.name)
-    product_schema_url = url_for('api.get_product_schema', domain=domain.name)
-    groups_url = url_for('api.get_groups', domain=domain.name)
-    group_url = url_for('api.get_group', domain=domain.name, 
+    domain_url = api_url('api.get_domain', domain_name=domain.name)
+    product_schema_url = api_url('api.get_product_schema', domain=domain.name)
+    groups_url = api_url('api.get_groups', domain=domain.name)
+    group_url = api_url('api.get_group', domain=domain.name, 
                           group_id='{group_id}')
-    group_resources_url = url_for(
+    group_resources_url = api_url(
         'api.get_group_resources', domain=domain.name)
-    products_url = url_for('api.get_products', domain=domain.name)
-    product_url = url_for('api.get_product', domain=domain.name, 
+    products_url = api_url('api.get_products', domain=domain.name)
+    product_url = api_url('api.get_product', domain=domain.name, 
                           product_id='{product_id}')
-    product_json_url = url_for('api.get_product_json', domain=domain.name,
+    product_json_url = api_url('api.get_product_json', domain=domain.name,
                                product_id='{product_id}')
-    product_details_url = url_for('api.get_product_details', domain=domain.name)
-    product_resources_url = url_for(
+    product_details_url = api_url('api.get_product_details', domain=domain.name)
+    product_resources_url = api_url(
         'api.get_product_resources', domain=domain.name)
-    source_images_url = url_for('api.post_source_image', domain=domain.name)
-    images_url = url_for('api.get_images', domain=domain.name)
-    #inquiries_url = url_for('api.get_inquiries', domain=domain.name)
+    source_images_url = api_url('api.post_source_image', domain=domain.name)
+    images_url = api_url('api.get_images', domain=domain.name)
+    #inquiries_url = api_url('api.get_inquiries', domain=domain.name)
     rv = hal()._l('self', domain_url)
     rv._k('name', domain.name)
     rv._k('creation_date', domain.creation_date.date())
@@ -204,7 +204,7 @@ def _check_domain_ownership(domain_name, **kw):
     account = _get_account(g.access_token['account_id'])
     try:
         domain = Domain.query.filter_by(name=domain_name).one()
-    except orm_exc.NoResultFound, orm_exc.MultipleResultsFound:
+    except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
         json_abort(404, {'error': 'Domain not found.'})
     domain_account = _get_domain_account(
         domain_id=domain.domain_id, account_id=g.access_token['account_id'])
@@ -297,7 +297,7 @@ def get_domain_accounts(domain, params):
         q = q.filter_by(active=params['active'])
     accounts = q.all()
     rv = hal()
-    rv._l('self', url_for('api.get_domain_accounts'))
+    rv._l('self', api_url('api.get_domain_accounts'))
     rv._embed('accounts', [_get_domain_account_resource(a) for a in accounts])
 
     return rv.document, 200, []

@@ -4,6 +4,7 @@ from flask import g, request, url_for, current_app as app, jsonify, abort
 from werkzeug import exceptions as werk_exc, Response
 from werkzeug.datastructures import MultiDict
 import re 
+import jwt
 
 from . import blueprint as bp
 from b2bapi.db import db
@@ -17,6 +18,10 @@ def hal():
     return Hal()._c('productlist', 'https://api.productlist.io/doc/{rel}')
 
 # setting domain name in urls that expects it during `url_for()`
+def api_url(*a, **kw):
+    url = url_for(*a, **kw)
+    return '/'.join([app.config['API_HOST'].strip('/'), url.lstrip('/')])
+
 @bp.url_defaults
 def set_domain(endpoint, values):
     if 'domain' in values or not getattr(g, 'domain', None):
@@ -254,7 +259,8 @@ def access_token_authentication():
 #        pass
 
 def domain_privacy_control(**kw):
-    if g.domain.privacy_level=='public':
+    # make privacy level 'private' by default
+    if g.domain.meta.get('privacy', 'private')=='public':
         return True
     try:
         return access_token_authentication()
@@ -292,6 +298,8 @@ def authentication(fnc, processor):
                 'token.'})
     return wrapper
 
+# if a resource must go through authorization an access_token should
+# be present in g.
 def domain_owner_authorization(**kw):
     domain_member = g.access_token.domain==g.domain.name
     return domain_member and g.access_token.role=='admin'
@@ -300,7 +308,8 @@ def account_owner_authorization(**kw):
     return g.access_token['account_id']==kw.get('account_id')
 
 def domain_member_authorization(**kw):
-    if g.domain.privacy_level=='public':
+    # make privacy level 'private' by default
+    if g.domain.meta.get('privacy', 'private')=='public':
         return True
     member = g.access_token['domain']==g.domain.name
     return member and g.access_token.role in ['admin', 'user']
@@ -311,7 +320,7 @@ def authorization(fnc, processor):
         dev_authorized = app.config.get('DEV_MODE', False)
         # if a resource must go through authorization an access_token should
         # be present in g.
-        authorized = processor(g.access_token, **kw)
+        authorized = processor(**kw)
 
         if authorized or dev_authorized:
             return fnc(*a, **kw)
@@ -535,7 +544,7 @@ def route(
                 raise Exception(
                     'The `expect_account` directive requires a user provided '
                     'authentication processor.')
-            fnc = access_token_injector(fnc)
+            fnc = account_injector(fnc)
 
         if expects_auth:
             # cannot pass auth without authentication

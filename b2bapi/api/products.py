@@ -17,7 +17,7 @@ from b2bapi.db.schema import generic as product_schema
 from ._route import (
     route, json_abort, hal,
     domain_owner_authorization as domain_owner_authz,
-    account_owner_authorization as account_owner_authz,
+    api_url,
 )
 from .product_utils import patch_record, Mismatch
 
@@ -47,9 +47,9 @@ def _products_query(domain_id, **params):
        authorize=domain_owner_authz, expects_lang=True, readonly=True)
 def get_products(params, domain, lang):
     products = _products_query(domain_id=domain.domain_id).all()
-    product_url = url_for('api.get_product', product_id='{product_id}')
+    product_url = api_url('api.get_product', product_id='{product_id}')
     rv = hal()
-    rv._l('self', url_for('api.get_products', **params))
+    rv._l('self', api_url('api.get_products', **params))
     rv._l('productlist:product', product_url, unquote=True, templated=True)
     rv._k('product_ids', [p.product_id for p in products])
     return rv.document, 200, []
@@ -65,7 +65,7 @@ def get_product_resources(params, domain, lang):
     products = q.all()
 
     rv = hal()
-    rv._l('self', url_for('api.get_product_resources'))
+    rv._l('self', api_url('api.get_product_resources'))
     rv._k('product_ids', [p.product_id for p in products])
     rv._embed('products', [_get_product_resource(p, lang) for p in products])
     return rv.document, 200, []
@@ -98,7 +98,7 @@ def _field_schema(f, lang):
 @route('/product-schema', expects_lang=True) 
 def get_product_schema(lang):
     rv = hal()
-    rv._l('self', url_for('api.get_product_schema'))
+    rv._l('self', api_url('api.get_product_schema'))
     rv._k('name', product_schema['name'])
     rv._k('fields', [_field_schema(f, lang) 
                      for f in product_schema['schema']['fields']])
@@ -140,11 +140,11 @@ def get_product(product_id, domain, params, lang):
 
 def _get_product_resource(p, lang):
     rv = hal()
-    rv._l('self', url_for(
+    rv._l('self', api_url(
         'api.get_product', product_id=clean_uuid(p.product_id)))
-    rv._l('images', url_for(
+    rv._l('images', api_url(
         'api.get_product_images', product_id=clean_uuid(p.product_id)))
-    rv._l('groups', url_for(
+    rv._l('groups', api_url(
         'api.put_product_groups', product_id=clean_uuid(p.product_id)))
 
     rv._k('product_id', clean_uuid(p.product_id))
@@ -236,7 +236,7 @@ def post_product(data, lang):
     populate_product(p, data, lang)
     db.session.add(p)
     db_flush()
-    location = url_for(
+    location = api_url(
         'api.get_product', product_id=p.product_id, partial=False)
     rv = hal()
     rv._l('location', location)
@@ -274,7 +274,7 @@ def get_product_details(domain, lang, params):
     #TODO: validate params
     product_ids = params.getlist('pid')
     rv = hal()
-    rv._l('self', url_for('api.get_product_details'))
+    rv._l('self', api_url('api.get_product_details'))
     products = Product.query.filter(
         Product.product_id.in_(product_ids),
         Product.domain_id==domain.domain_id,
@@ -391,18 +391,18 @@ def grouped_query(q, groups):
 #    #_p_order = lambda p: p.data['fields_order'][0]
 #    products = q.all()
 #    rv = {
-#        'self': url_for('api.get_products',**params),
+#        'self': api_url('api.get_products',**params),
 #        'products': [_product_summary(p, lang) for p in products],
 #    }
 #    return rv, 200, []
 
 #def _product_summary(p, lang):
 #    return {
-#        'self': url_for('api.get_product_summary', product_id=p.product_id),
+#        'self': api_url('api.get_product_summary', product_id=p.product_id),
 #        'product_id': p.product_id.hex,
 #        #'caption': _caption(p.data, lang),
 #        'captionable_fields': _caption_fields(p.data['fields'], lang),
-#        'url': url_for('api.get_product', product_id=p.product_id),
+#        'url': api_url('api.get_product', product_id=p.product_id),
 #    } 
 
 #def _caption_fields(fields, lang):
@@ -461,7 +461,7 @@ def grouped_query(q, groups):
 #        product['fields'] = [field_metas[pf['name']].init_schema(pf) 
 #                             for pf in product_fields]
 #    rv = {
-#        'self': url_for(
+#        'self': api_url(
 #            'api.get_product_template', product_type_id=product_type_id),
 #        'template': product,
 #    }
@@ -477,8 +477,8 @@ def grouped_query(q, groups):
 #def get_product(product_id, lang):
 #    product = _get_product(product_id)
 #    rv = {
-#        'self': url_for('api.get_product', product_id=product_id),
-#        'summary_url': url_for('api.get_product_summary', product_id=product_id),
+#        'self': api_url('api.get_product', product_id=product_id),
+#        'summary_url': api_url('api.get_product_summary', product_id=product_id),
 #        #'caption': _caption(product, lang),
 #        'product_id': product_id,
 #        'fields': _fields(product.data.get('fields', []), lang),
@@ -517,7 +517,7 @@ def grouped_query(q, groups):
 #        captionable = f.get('captionable'),
 #        searchable = f.get('searchable'),
 #        meta = {
-#            'url': url_for('api.get_field', field_id=clean_uuid(meta.field_id)),
+#            'url': api_url('api.get_field', field_id=clean_uuid(meta.field_id)),
 #            'name': f['name'],
 #            'field_id': clean_uuid(meta.field_id),
 #            'rel': 'FieldMeta',} if meta else None,

@@ -9,7 +9,6 @@ class Domain(db.Billable):
     name = db.Column(db.Unicode, unique=True)
     creation_date = db.Column(db.DateTime, default=dtm.utcnow)
     data = db.Column(db.JSONB, default=dict)
-    privacy_level = db.Column(db.Unicode, default='public')
     meta = db.Column(db.JSONB, default=dict)
     # see additional fields in Billable model
 
