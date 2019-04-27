@@ -301,8 +301,8 @@ def authentication(fnc, processor):
 # if a resource must go through authorization an access_token should
 # be present in g.
 def domain_owner_authorization(**kw):
-    domain_member = g.access_token.domain==g.domain.name
-    return domain_member and g.access_token.role=='admin'
+    domain_member = g.access_token['domain']==g.domain.name
+    return domain_member and g.access_token['role']=='admin'
 
 def account_owner_authorization(**kw):
     return g.access_token['account_id']==kw.get('account_id')
@@ -312,7 +312,7 @@ def domain_member_authorization(**kw):
     if g.domain.meta.get('privacy', 'private')=='public':
         return True
     member = g.access_token['domain']==g.domain.name
-    return member and g.access_token.role in ['admin', 'user']
+    return member and g.access_token['role'] in ['admin', 'user']
 
 def authorization(fnc, processor):
     @functools.wraps(fnc)
@@ -357,12 +357,10 @@ def dbsession_rollback(fnc):
     return wrapper
 
 def auth_injector(fnc):
-    access_token_schemes = ['access_token', 'access-token', 'accesstoken']
-    @functools.wraps(fnc)
     def wrapper(*a, **kw):
         try:
             scheme, credentials = request.headers['Authorization'].split()
-            if scheme.lower() in access_token_schemes:
+            if scheme.lower()=='bearer':
                 kw['auth'] = {
                     'scheme': 'token',
                     'token': credentials,

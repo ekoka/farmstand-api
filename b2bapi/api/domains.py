@@ -1,5 +1,5 @@
 from datetime import datetime as dtm, timedelta
-from flask import current_app as app
+from flask import current_app as app, g
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
