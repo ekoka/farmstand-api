@@ -540,7 +540,7 @@ def route(
             # cannot have access_token if user not authenticated
             if not _authenticate:
                 raise Exception(
-                    'The `expect_account` directive requires a user provided '
+                    'The `expects_account` directive requires a user provided '
                     'authentication processor.')
             fnc = account_injector(fnc)
 

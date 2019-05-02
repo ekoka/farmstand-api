@@ -4,7 +4,7 @@ from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
 
-from b2bapi.db.models.domains import Domain, DomainAccount
+from b2bapi.db.models.domains import Domain, DomainAccount, DomainAccessRequest
 from b2bapi.db.models.billing import Plan
 from b2bapi.db import db
 from ._route import (
@@ -216,6 +216,7 @@ def get_domain(domain_name, lang):
     domain = _get_domain(domain_name=domain_name)
     return _get_domain_resource(domain, lang), 200, []
 
+
 @route('/domain/<domain_name>', methods=['put'], domained=False,
        authorize=_check_domain_ownership, expects_lang=True, expects_data=True)
 def put_domain(domain_name, data, lang):
@@ -262,6 +263,7 @@ def _set_domain_account(domain_id, account_id):
         db.session.add(rv)
         db.session.flush()
         return rv
+
 
 @route('/accounts', methods=['POST'], expects_data=True, expects_domain=True,
        authorize=domain_owner_authz)
@@ -316,3 +318,55 @@ def get_domain_account(domain, account_id):
 def _get_domain_account_resource(domain_account):
     resource = hal()
     return resource.document
+
+@route('/access-requests', methods=['POST'], expects_data=True, domained=False,
+       authenticate=True, expects_account=True)
+def post_access_request(account, data):
+    try:
+        domain = Domain.query.filter_by(name=data.get('domain')).one()
+    except orm_exc.NoResultFound:
+        json_abort(404, {'error': 'Domain not found.'})
+    # TODO validation
+    access_request = DomainAccessRequest(
+        account_id=account['account_id'],
+        domain_id=domain.domain_id,
+        creation_date=dtm.utcnow(),
+        status="pending",
+        data={
+            'message': data.get('message'),
+            'fields': data.get('fields'),
+        },
+    )
+    db.session.add(access_request)
+    try:
+        db.session.flush()
+    except sql_exc.IntegrityError:
+        db.session.rollback()
+        json_abort(409, {'error': "Recent access request already exists."})
+    rv = hal()
+    location = api_url(
+        'api.get_access_request', domain_id=domain.domain_id)
+    rv._l('location', location)
+    return rv.document, 201, [('Location', location)]
+
+
+@route('/access-requests/<domain_id>', domained=False, expects_account=True,
+       authenticate=True)
+def get_access_request(domain_id, account):
+    try:
+        access_request = DomainAccessRequest.query.filter_by(
+            domain_id=domain_id, account_id=account.account_id).one()
+    except orm_exc.NoResultFound:
+        json_abort(404, {'error': 'Access request not found.'})
+    except orm_exc.MultipleResultsFound:
+        json_abort(409, {'error': 'Multiple access requests found.'})
+
+    rv = hal()
+    rv._l('self', api_url('api.get_access_request',
+                          domain_id=domain_id))
+    rv._k('status', access_request.status)
+    rv._k('data', access_request.data)
+    rv._k('created', access_request.creation_date)
+    return rv.document, 200, []
+
+

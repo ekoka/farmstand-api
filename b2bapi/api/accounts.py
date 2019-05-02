@@ -144,15 +144,18 @@ def post_access_token(data, account):
     domain_name = data.get('domain')
     if domain_name:
         try:
-            from .domains import _get_domain_account
             domain = Domain.query.filter_by(name=domain_name).one()
+        except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
+            json_abort(404, {'error': 'Domain not found'})
+
+        try:
+            from .domains import _get_domain_account
             domain_account = _get_domain_account(
                 domain_id=domain.domain_id, account_id=account.account_id)
-            if not domain_account.active:
-                raise Exception()
-            role = domain_account.role or 'user'
-        except:
-            json_abort(401, {'error': 'Not authorized.'})
+            if domain_account.active:
+                role = domain_account.role or 'user'
+        except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
+            pass
 
     payload = {
         'account_id': clean_uuid(account.account_id),

@@ -111,21 +111,6 @@ class Invite(db.Model, db.DomainMixin):
     #status_change = db.Column(db.DateTime)
 
 
-class AccessRequest(db.Model, db.DomainMixin):
-    """
-    User can request access to a merchant's catalog.
-    """
-    __tablename__ = 'access_requests'
-    account_id = db.Column(
-        None, db.ForeignKey('accounts.account_id'), primary_key=True)
-    status = db.Column(db.Unicode)
-    #request_time = db.Column(db.DateTime)
-    #role = db.Column(db.Unicode, default="user")
-
-    #__table_args__ = (
-    #    db.UniqueConstraint('domain_id', 'account_id'),
-    #)
-
 class User(db.Model, db.DomainMixin):
     """
     Table of accounts that were granted access to domain.

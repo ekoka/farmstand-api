@@ -24,13 +24,9 @@ class Domain(db.Billable):
             'languages': ['en'],
         }
 
-
-
-class DomainAccount(db.Model):
+class DomainAccount(db.Model, db.DomainMixin):
     __tablename__ = 'domain_accounts'
 
-    domain_id = db.Column(None, db.ForeignKey(
-        'domains.domain_id', ondelete='cascade'), primary_key=True)
     account_id = db.Column(None, db.ForeignKey(
         'accounts.account_id', ondelete='cascade'), primary_key=True)
     active = db.Column(db.Boolean, default=False)
@@ -38,3 +34,14 @@ class DomainAccount(db.Model):
 
     domain = db.relationship(Domain, backref='accounts')
     account = db.relationship('Account', backref='domains')
+
+class DomainAccessRequest(db.Model, db.DomainMixin):
+    """
+    User can request access to a merchant's catalog.
+    """
+    __tablename__ = 'domain_access_requests'
+    account_id = db.Column(
+        None, db.ForeignKey('accounts.account_id'), primary_key=True)
+    creation_date = db.Column(db.DateTime, default=dtm.utcnow) 
+    status = db.Column(db.Unicode)
+    data = db.Column(db.JSONB, default=dict)

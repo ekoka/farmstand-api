@@ -41,5 +41,9 @@ def get_root():
         'SUBDOMAIN_HOST_TEMPLATE'], templated=True, unquote=True)
     rv._l('productlist:api_host', app.config['API_HOST'])
     rv._l('productlist:account_host', app.config['ACCOUNT_HOST'])
+    rv._l('productlist:access_requests', api_url('api.post_access_request'))
+    rv._l('productlist:access_request', api_url(
+        'api.get_access_request', domain_id='{domain_id}'), templated=True,
+        unquote=True)
 
     return rv.document, 200, []

@@ -21,4 +21,5 @@ from .public import (
     root as public_root,
     #inquiries as public_inquiries,
     quotations as public_quotations,
+    domains as public_domains,
 )

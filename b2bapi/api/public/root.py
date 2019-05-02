@@ -12,6 +12,8 @@ from ..utils import delocalize_data
 def get_public_root(domain, lang):
     rv = hal()
     rv._l('self', api_url('api.get_public_root'))
+    rv._l('productlist:public_domain', api_url('api.get_public_domain', 
+        domain_name="{domain}"), unquote=True, templated=True)
     rv._l('productlist:public_products', api_url(
         'api.get_public_products', domain=domain.name))
     rv._l('productlist:public_groups', api_url(
