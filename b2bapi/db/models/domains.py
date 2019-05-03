@@ -1,4 +1,5 @@
 from . import db
+from uuid import uuid4
 from datetime import datetime as dtm
 
 class Domain(db.Billable):
@@ -35,13 +36,19 @@ class DomainAccount(db.Model, db.DomainMixin):
     domain = db.relationship(Domain, backref='accounts')
     account = db.relationship('Account', backref='domains')
 
-class DomainAccessRequest(db.Model, db.DomainMixin):
+class DomainAccessRequest(db.Model):
     """
     User can request access to a merchant's catalog.
     """
     __tablename__ = 'domain_access_requests'
+    access_request_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     account_id = db.Column(
-        None, db.ForeignKey('accounts.account_id'), primary_key=True)
+        None, db.ForeignKey('accounts.account_id'), nullable=False)
+    domain_id = db.Column(
+        None, db.ForeignKey('domains.domain_id'), nullable=False)
     creation_date = db.Column(db.DateTime, default=dtm.utcnow) 
     status = db.Column(db.Unicode)
     data = db.Column(db.JSONB, default=dict)
+
+    account = db.relationship('Account', backref="access_requests")
+    domain = db.relationship('Domain', backref="access_requets")

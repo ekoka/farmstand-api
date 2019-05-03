@@ -125,8 +125,6 @@ def generate_token(payload):
 
 def id_token_authentication(**kw):
     scheme, credentials = request.headers['authorization'].split(' ')
-    app.logger.info(scheme)
-    app.logger.info(credentials)
     if scheme.lower()!='bearer':
         return False
     try:
