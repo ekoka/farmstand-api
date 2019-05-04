@@ -6,7 +6,6 @@ from vino import errors as vno_err
 
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.models.domains import Domain, DomainAccount, DomainAccessRequest
-from b2bapi.db.models.accounts import Account
 from b2bapi.db.models.billing import Plan
 from b2bapi.db import db
 from ._route import (
@@ -150,12 +149,12 @@ def get_domains(access_token, lang):
     account = _get_account(access_token['account_id'])
     rv = hal()
     rv._l('self', api_url('api.get_domains'))
-    rv._embed('domains', [_get_domain_resource(account_domain, lang)
-                          for account_domain in account.domains])
+    rv._embed('domains', [_get_domain_resource(b, lang)
+                          for b in account.billables 
+                          if b.plan.plan_type=='domains'])
     return rv.document, 200, []
 
-def _get_domain_resource(account_domain, lang):
-    domain = account_domain.domain
+def _get_domain_resource(domain, lang, partial=False):
     domain_url = api_url('api.get_domain', domain_name=domain.name)
     product_schema_url = api_url('api.get_product_schema', domain=domain.name)
     groups_url = api_url('api.get_groups', domain=domain.name)
@@ -181,7 +180,6 @@ def _get_domain_resource(account_domain, lang):
     #inquiries_url = api_url('api.get_inquiries', domain=domain.name)
     rv = hal()._l('self', domain_url)
     rv._k('name', domain.name)
-    rv._k('role', account_domain.role)
     rv._k('creation_date', domain.creation_date.date())
     rv._l('productlist:product_schema', product_schema_url)
     rv._l('productlist:groups', groups_url)
@@ -289,7 +287,6 @@ def post_domain_account(data, domain):
         da.role = data.get('role', 'user')
         db.session.flush()
     except:
-        raise
         db.session.rollback()
         json_abort(400, {'error': 'Could not add account.'})
     return {}, 200, []
@@ -330,17 +327,7 @@ def get_domain_account(domain, account_id):
         json_abort(404, {'error': 'Account not found'})
 
 def _get_domain_account_resource(domain_account):
-    account = domain_account.account
     resource = hal()
-    resource._l('self', api_url(
-        'api.get_domain_account', account_id=account.account_id))
-    resource._k('account_id', domain_account.account_id)
-    resource._k('first_name', account.first_name)
-    resource._k('last_name', account.last_name)
-    resource._k('email', account.email)
-    resource._k('role', domain_account.role)
-    resource._k('active', domain_account.active)
-
     return resource.document
 
 @route('/access-requests', methods=['POST'], expects_data=True, domained=False,
@@ -394,48 +381,35 @@ def get_access_request(domain_id, account):
     return rv.document, 200, []
 
 
-@route('/access-requests', expects_domain=True, authorize=domain_owner_authz, 
-       expects_lang=True)
-def get_domain_access_requests(domain, lang):
+@route('/access-requests', expects_domain=True, authorize=domain_owner_authz)
+def get_domain_access_requests(domain):
     rv = hal()
     access_requests = DomainAccessRequest.query.filter_by(
         domain_id=domain.domain_id).all()
     rv._l('self', api_url('api.get_domain_access_requests'))
     rv._l('domain', api_url('api.get_domain', domain_name=domain.name))
-    rv._embed('access_requests', [_get_domain_access_request_resources(
-        record, lang) for record in access_requests])
+    rv._embed('access_requests', [_get_domain_access_request_resources(record) 
+                                  for record in access_requests])
     return rv.document, 200, []
 
-@route('/access-requests/<access_request_id>', authorize=domain_owner_authz,
-       expects_lang=True)
-def get_domain_access_request(access_request_id, lang):
+@route('/access-requests/<access_request_id>', authorize=domain_owner_authz)
+def get_domain_access_request(access_request_id):
     access_request = _get_access_request(access_request_id)
-    document = _get_domain_access_request_resources(access_request, lang)
+    document = _get_domain_access_request_resources(access_request)
     return document, 200, []
 
-def _get_domain_access_request_resources(access_request, lang):
+def _get_domain_access_request_resources(access_request):
     rv = hal()
-    rv._l('self', api_url(
-        'api.get_domain_access_request', access_request_id=clean_uuid(
-            access_request.access_request_id)))
+    rv._l('self', api_url('api.get_domain_access_request', 
+                          access_request_id=access_request.access_request_id))
     rv._k('access_request_id', clean_uuid(access_request.access_request_id))
     rv._k('status', access_request.status)
     rv._k('creation_date', access_request.creation_date)
     rv._k('message', access_request.data.get('message'))
     account = access_request.account
-
-    account_data = delocalize_data(
-        account.data, account.localized_fields, lang)
-    account_resource = dict(
-        account_id = account.account_id,
-        first_name = account.first_name,
-        last_name = account.last_name,
-        email = account.primary_email and account.primary_email.email,
-    )
-    account_resource.update({
-        f: account_data.get(f) for f in access_request.data.get('fields', [])
+    rv._k('account', {
+        f: account.data.get(f) for f in access_request.data.get('fields', [])
     })
-    rv._k('account', account_resource)
     return rv.document
 
 def _get_access_request(access_request_id):

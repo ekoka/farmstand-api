@@ -25,6 +25,12 @@ class Account(db.Model):
     localized_fields = ['company', 'role', 'summary', 'address', 'city',
                         'state_province', 'country']
 
+    @property
+    def primary_email(self):
+        for e in self.emails:
+            if e.primary and e.verified:
+                return e
+
     @hybrid_property
     def password(self):
         return self._password
