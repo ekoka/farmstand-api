@@ -150,12 +150,18 @@ def get_domains(access_token, lang):
     account = _get_account(access_token['account_id'])
     rv = hal()
     rv._l('self', api_url('api.get_domains'))
-    rv._embed('domains', [_get_domain_resource(account_domain, lang)
-                          for account_domain in account.domains])
+
+    domains = []
+    roles = {}
+    for account_domain in account.domains:
+        domain = account_domain.domain
+        domains.append(_get_domain_resource(domain, lang))
+        roles[domain.name] = account_domain.role
+    rv._embed('domains', domains)
+    rv._k('roles', roles)
     return rv.document, 200, []
 
-def _get_domain_resource(account_domain, lang):
-    domain = account_domain.domain
+def _get_domain_resource(domain, lang):
     domain_url = api_url('api.get_domain', domain_name=domain.name)
     product_schema_url = api_url('api.get_product_schema', domain=domain.name)
     groups_url = api_url('api.get_groups', domain=domain.name)
@@ -181,7 +187,6 @@ def _get_domain_resource(account_domain, lang):
     #inquiries_url = api_url('api.get_inquiries', domain=domain.name)
     rv = hal()._l('self', domain_url)
     rv._k('name', domain.name)
-    rv._k('role', account_domain.role)
     rv._k('creation_date', domain.creation_date.date())
     rv._l('productlist:product_schema', product_schema_url)
     rv._l('productlist:groups', groups_url)

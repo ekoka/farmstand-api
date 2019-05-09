@@ -4,8 +4,8 @@ from sqlalchemy.ext.compiler import compiles
 
 class TriggerProcedure(DDLElement):
 
-    def __init__(self, name, script, trigger_type=u'trigger'):
-        if trigger_type not in [u'event_trigger', u'trigger']:
+    def __init__(self, name, script, trigger_type='trigger'):
+        if trigger_type not in ['event_trigger', 'trigger']:
             raise Exception('Unknown trigger type: %s.' % trigger_type)
         self.name = name 
         self.script = script
@@ -13,7 +13,7 @@ class TriggerProcedure(DDLElement):
 
 @compiles(TriggerProcedure, 'postgresql')
 def render_trigger_procedure(element, compiler):
-    template = u"""
+    template = """
     CREATE OR REPLACE FUNCTION {name}() RETURNS {trigger_type} AS 
     $script$
     BEGIN
@@ -34,12 +34,12 @@ def needle_set(needles):
     return needles
 
 class Trigger(DDLElement):
-    allowed_when = {u'BEFORE', u'AFTER', u'INSTEAD OF'}
-    allowed_events = {u'INSERT', u'UPDATE', u'DELETE', u'TRUNCATE'}
-    allowed_levels = {u'ROW', u'STATEMENT'}
+    allowed_when = {'BEFORE', 'AFTER', 'INSTEAD OF'}
+    allowed_events = {'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE'}
+    allowed_levels = {'ROW', 'STATEMENT'}
 
-    def __init__(self, trigger_name, table, procedure, events, level=u'ROW',
-                 when=u'BEFORE'):
+    def __init__(self, trigger_name, table, procedure, events, level='ROW',
+                 when='BEFORE'):
 
         if when.upper() not in self.allowed_when:
             raise Exception('Unknown WHEN condition: %s.' % when)
@@ -69,7 +69,7 @@ class Trigger(DDLElement):
 
 @compiles(Trigger, 'postgresql')
 def render_trigger(element, compiler, **kw):
-    template = u"""
+    template = """
     DROP TRIGGER IF EXISTS {trigger_name} on {table_name} CASCADE;
     CREATE TRIGGER {trigger_name} {when} {events}
     ON {table_name}
@@ -80,7 +80,7 @@ def render_trigger(element, compiler, **kw):
         trigger_name=element.trigger_name,
         table_name=element.table_name,
         when=element.when,
-        events=u' OR '.join(element.events),
+        events=' OR '.join(element.events),
         level=element.level,
         trigger_procedure=element.procedure,
     )

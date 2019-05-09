@@ -26,18 +26,53 @@ from .images import img_aspect_ratios
 from .validation.products import (add_product, edit_product, edit_product_members)
 
 def _delocalize_product_field(field, lang):
+    """
+    delocalize fields, i.e. remove the lang context from field
+    """
     rv = dict(**field)
     if field.get('localized'):
-        rv['value'] = rv.setdefault('value', {}).get(lang)
+        try:
+            rv['value'] = rv.setdefault('value', {}).get(lang)
+        except AttributeError:
+            pass
+        rv['localized'] = True
+
     return rv
 
 def _localize_product_fields(fields, lang):
+    """
+    localize fields, i.e. add a lang context
+    """
     for field in fields:
+        # if field has no value, skip
         if 'value' not in field:
             continue
+        # if field has the `localized` flag, localize the value
         if field.get('localized'):
             field['value'] = {lang: field['value']}
 
+def _localized_field_schema(field, lang):
+    rv = {}
+    rv['label'] = field['schema']['label'][lang]
+    
+    if field['field_type']=='BOOL':
+        for v in (True, False):
+            rv.setdefault('options',{})[v] = field['schema']['options'][v][lang]
+        return rv
+
+    if field['field_type'] in ('MULTI_CHOICE', 'SINGLE_CHOICE',):
+        for o in field['schema']['options']:
+            rv.setdefault('options',[]).append(
+                {'value': o['value'], 'label': o['label'][lang]})
+    return rv
+
+def _field_schema(f, lang):
+    field = copy.deepcopy(f['field'])
+    field['display'] = f.get('display', False)
+    field['searchable'] = f.get('searchable', False)
+    field['localized'] = f.get('localized', False)
+    field['schema'] = _localized_field_schema(field, lang)
+    return field
 def _products_query(domain_id, **params):
     q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
     q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
@@ -69,29 +104,6 @@ def get_product_resources(params, domain, lang):
     rv._k('product_ids', [p.product_id for p in products])
     rv._embed('products', [_get_product_resource(p, lang) for p in products])
     return rv.document, 200, []
-
-
-def _localized_field_schema(field, lang):
-    rv = {}
-    rv['label'] = field['schema']['label'][lang]
-    
-    if field['field_type']=='BOOL':
-        for v in (True, False):
-            rv.setdefault('options',{})[v] = field['schema']['options'][v][lang]
-        return rv
-
-    if field['field_type'] in ('MULTI_CHOICE', 'SINGLE_CHOICE',):
-        for o in field['schema']['options']:
-            rv.setdefault('options',[]).append(
-                {'value': o['value'], 'label': o['label'][lang]})
-    return rv
-
-def _field_schema(f, lang):
-    field = copy.deepcopy(f['field'])
-    field['display'] = f.get('display', False)
-    field['searchable'] = f.get('searchable', False)
-    field['schema'] = _localized_field_schema(field, lang)
-    return field
 
 # NOTE: just an alias route
 @route('/product-template', endpoint='get_product_template', expects_lang=True)
@@ -176,15 +188,6 @@ def _get_product_groups(p):
             fo.group_option_id))
     return rv
 
-
-def load_field_metas(schema_names, domain_id):
-    # query the db for fields with those names and produce
-    # a dict indexed by those names
-    fields = Field.query.filter(Field.domain_id==domain_id, 
-                                Field.name.in_(schema_names)).all()
-    return {f.name:f for f in fields}
-
-
 def populate_product(product, data, lang):
     for k,v in data.items():
         if k=='fields':
@@ -192,8 +195,9 @@ def populate_product(product, data, lang):
         else:
             setattr(product,k,v)
 
-
 def _merge_fields(productfields, fields, lang):
+    # productfields: database fields to update
+    # fields: fresh data to populate the fields
     # loop through the uploaded fields
     for f in fields:
         # if field is a text type
@@ -202,20 +206,25 @@ def _merge_fields(productfields, fields, lang):
             # to an empty dict, ready to take localized values
             f['value'], value = {}, f.get('value')
 
-            # now we search if the product already has an existing field with
-            # the same name
+            # now we search if the product already has an existing 
+            # field with the same name.
             for pf in productfields['fields']:
-                # if we find a matching field we give its (localized) value
-                # to our just uploaded field's value
+                # if we find a matching field we give its (localized) 
+                # value to our just uploaded field's value
                 if pf.get('name')==f['name']:
-                    f['value'] = pf.get('value', {})
+                    if not isinstance(pf['value'], dict):
+                        # if field was not localized before and now is
+                        # TODO: pick default lang from config
+                        default_lang = 'en'
+                        f['value'] = {default_lang: pf['value']}
+                    else:
+                        f['value'] = pf['value']
             # now whether the field was already present or not
             # we set the uploaded value as a localized value
             f['value'][lang] = value
 
     # we're now ready to replace the old fields with the new data set
     productfields['fields'] = fields
-
 
 def db_flush():
     try:

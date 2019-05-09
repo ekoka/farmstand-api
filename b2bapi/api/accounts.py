@@ -421,7 +421,7 @@ def _get_account_resource(account, lang, partial=False):
     rv._k('last_name', account.last_name)
 
     from .domains import _get_domain_resource
-    domains = [_get_domain_resource(domain.domain, lang, partial=True) 
+    domains = [_get_domain_resource(domain.domain, lang,) 
                for domain in account.domains]
     rv._k('roles', {d.domain.name:d.role for d in account.domains})
     rv._embed('domains', domains)
