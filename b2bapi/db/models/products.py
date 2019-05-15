@@ -112,10 +112,11 @@ class ProductSearch(db.Model, db.DomainMixin):
     __tablename__ = 'product_search'
 
     product_id = db.Column(None, primary_key=True)
-    lang = db.Column(db.Unicode, primary_key=True)
+    lang = db.Column(db.Unicode, default='en', primary_key=True)
     search = db.Column(db.TSVector)
 
     __table_args__ = (
         db.ForeignKeyConstraint([product_id, 'domain_id'], 
                                 ['products.product_id', 'products.domain_id']),
+        db.Index(None, search, postgresql_using='gin')
     )

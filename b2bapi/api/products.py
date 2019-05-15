@@ -1,4 +1,3 @@
-import uuid
 import simplejson as json
 import copy
 from datetime import datetime as dtm
@@ -24,6 +23,56 @@ from .product_utils import patch_record, Mismatch
 from .images import img_aspect_ratios
 
 from .validation.products import (add_product, edit_product, edit_product_members)
+
+def _update_search_index(product, lang):
+    language = app.config['LOCALES'].get(lang,{}).get('language', 'simple')
+    searchable = [f for f in product.fields.get('fields', [])
+                  if f.get('searchable')]
+    search = []
+    for f in searchable:
+        value = f.get('value')
+        if f.get('localized'):
+            try:
+                value = f['value'][lang]
+            except (AttributeError, KeyError) as e:
+                value = ''
+        search.append(value)
+
+
+    try:
+        statement = '''
+        insert into product_search (domain_id, product_id, lang, search)
+        values (:domain_id, :product_id, :lang, to_tsvector(:language, :search))
+        '''
+        db.session.begin_nested()
+        db.session.execute(statement, {
+            'domain_id':product.domain_id,
+            'lang':lang,
+            'product_id':product.product_id,
+            'search': ' '.join(search),
+            'language': language,
+        })
+        db.session.commit()
+    except sql_exc.IntegrityError:
+        db.session.rollback()
+        statement = '''
+        update product_search 
+        set search = to_tsvector(:language, coalesce(:search))
+        where product_id=:product_id and domain_id=:domain_id and lang=:lang
+        '''
+        db.session.begin_nested()
+        try:
+            db.session.execute(statement, {
+                'domain_id':product.domain_id,
+                'lang':lang,
+                'product_id':product.product_id,
+                'language': language,
+                'search': ' '.join(search)})
+            db.session.commit()
+        except:
+            db.session.rollback()
+            raise
+
 
 def _delocalize_product_field(field, lang):
     """
@@ -73,15 +122,38 @@ def _field_schema(f, lang):
     field['localized'] = f.get('localized', False)
     field['schema'] = _localized_field_schema(field, lang)
     return field
-def _products_query(domain_id, **params):
+
+def _recent_products(domain_id, params, lang):
     q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
     q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
-    return q
+    return q.all()
+
+def _search_products(params, domain_id, lang):
+    language = app.config['LOCALES'].get(lang,{}).get('language', 'simple')
+    statement = """
+    select product_id from product_search
+    where search @@ to_tsquery(:language, :search)
+    and domain_id = :domain_id
+    order by ts_rank(search, to_tsquery(:language, :search))
+    """
+    search = '|'.join(s.strip() for s in params['q'].split(' ') if s.strip())
+    return db.session.execute(statement, {
+        'search': search, 
+        'domain_id': domain_id,
+        'language': language,
+    }).fetchall()
 
 @route('/products', expects_params=True, expects_domain=True,
-       authorize=domain_owner_authz, expects_lang=True, readonly=True)
+       expects_lang=True, readonly=True)
+       #authorize=domain_owner_authz, expects_lang=True, readonly=True)
 def get_products(params, domain, lang):
-    products = _products_query(domain_id=domain.domain_id).all()
+    if params.get('q'):
+        products = _search_products(
+            params=params, domain_id=domain.domain_id, lang=lang)
+    else:
+        products = _recent_products(
+            params=params, domain_id=domain.domain_id, lang=lang)
+
     product_url = api_url('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', api_url('api.get_products', **params))
@@ -262,6 +334,7 @@ def put_product(product_id, data, domain, lang):
     p.updated_ts = dtm.utcnow()
     populate_product(p, data, lang)
     db_flush()
+    _update_search_index(p, lang)
     return {}, 200, []
 
 @route('/products/<product_id>/groups', methods=['PUT'], expects_domain=True,
@@ -458,7 +531,7 @@ def grouped_query(q, groups):
 #    product_type = ProductType.query.filter_by(
 #        product_type_id=product_type_id, domain_id=domain_id).one()
 #    product = {
-#        'product_id': uuid.uuid4().hex,
+#        'product_id': uuid4().hex,
 #    }
 #    # if ProductType object has schema load it
 #    if product_type.schema:
@@ -496,19 +569,6 @@ def grouped_query(q, groups):
 
 
 # TODO: we'll eventually have to revert to this version or something close,
-# that is aware of Field schema stored in the database.
-#def _merge_fields(productdata, datafields, lang):
-#    field_types = {f.name: f.field_type for f in Field.query.all()}
-#    for df in datafields:
-#        field_type = field_types.get(df.get('name'))
-#        if field_type in Field.text_types:
-#            df['value'], value = {}, df.get('value') # uploaded value
-#            #if product.data and product.data.fields:
-#            for pf in productdata['fields']:
-#                if pf.get('name')==df['name']:
-#                    df['value'] = pf.get('value', {}) # localized values
-#            df['value'][lang] = value # merge localized and uploaded value 
-#    productdata['fields'] = datafields
 
 #def _fields(fields, lang):
 #    if not fields:
