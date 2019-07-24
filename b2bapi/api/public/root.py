@@ -22,8 +22,7 @@ def get_public_root(domain, lang):
         'api.get_public_product_schema', domain=domain.name))
     rv._l('productlist:public_product_resources', api_url(
         'api.get_public_product_resources', domain=domain.name))
-    #TODO: later when implementing inquiries
-    #rv._l('simpleb2b:public-inquiries', api_url('api.post_public_inquiry'))
+    rv._l('productlist:public_inquiries', api_url('api.post_public_inquiry'))
     rv._l('productlist:public_product', api_url(
         'api.get_public_product', product_id="{product_id}",
         domain=domain.name), unquote=True, templated=True)

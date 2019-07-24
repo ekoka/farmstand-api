@@ -133,6 +133,9 @@ def id_token_authentication(**kw):
     except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
         return False
 
+#TODO: id_token_authentication sets g.current_account to an object, whereas  
+# access_token_authentication sets it to a dict. Some consistency would be
+# better.
 @route('/access-token', methods=['POST'], domained=False, expects_data=True,
        authenticate=id_token_authentication, expects_account=True)
 def post_access_token(data, account):

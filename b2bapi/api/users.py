@@ -25,7 +25,7 @@ def post_user_access_request(data, account):
     t = _get_domain(data.get('domain'))
     ar = AccessRequest(
         domain_id=t.domain_id,
-        account_id=account.account_id,
+        account_id=account['account_id'],
     )
     db.session.add(ar)
     try:
@@ -47,12 +47,12 @@ def _user_access_request_resource(ar):
     rv._k('status', ar.status)
     return rv.document
 
-@route('/access-requests/<domain_name>', domained=Falsej, authenticate=True,
+@route('/access-requests/<domain_name>', domained=False, authenticate=True,
        expects_account=True)
 def get_user_access_request(domain_name, account):
     t = _get_domain(domain_name)
     ar = _get_access_request(
-        account_id=account.account_id, domain_id=t.domain_id)
+        account_id=account['account_id'], domain_id=t.domain_id)
     rv = _user_access_request_resource(ar)
     return rv, 200, []
 

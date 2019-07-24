@@ -11,7 +11,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_babelex import Babel
 
 from .api import bp as api_blueprint
-from .utils.nav import menumapper 
 from .utils.gmail import Gmail
 
 from .db import db

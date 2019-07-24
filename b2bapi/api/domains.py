@@ -384,7 +384,7 @@ def post_access_request(account, data):
 def get_access_request(domain_id, account):
     try:
         access_request = DomainAccessRequest.query.filter_by(
-            domain_id=domain_id, account_id=account.account_id).one()
+            domain_id=domain_id, account_id=account['account_id']).one()
     except orm_exc.NoResultFound:
         json_abort(404, {'error': 'Access request not found.'})
     except orm_exc.MultipleResultsFound:

@@ -21,42 +21,51 @@ from ..images import img_aspect_ratios
 #from .validation.products import (add_product, edit_product)
 
 
-@route('/public/groups/<group_id>', expects_domain=True,
+@route('/public/groups/<group_id>', expects_domain=True, expects_lang=True,
        authenticate=privacy_control, authorize=domain_member)
-def get_public_group(group_id, domain):
+def get_public_group(group_id, domain, lang):
     try:
-        f = Group.query.filter_by(
+        g = Group.query.filter_by(
             group_id=group_id, domain_id=domain.domain_id).one()
     except:
         json_abort(404, {'error': 'Group not found'})
 
-    return _get_group_resource(f), 200, []
+    return _get_group_resource(g, lang), 200, []
 
-@route('/public/groups', expects_domain=True, 
+@route('/public/groups', expects_domain=True, expects_lang=True,
        authenticate=privacy_control, authorize=domain_member)
-def get_public_groups(domain):
+def get_public_groups(domain, lang):
     domain_id = domain.domain_id
     groups = Group.query.filter_by(domain_id=domain_id, active=True).all()
 
     rv = hal() 
     rv._l('self', api_url('api.get_public_groups'))
     rv._embed('groups',[
-        _get_group_resource(f) for f in  groups 
+        _get_group_resource(g, lang) for g in  groups 
     ])
 
     return rv.document, 200, []
 
-def _get_group_resource(f):
+
+def _getlabel(data, lang):
+    try:
+        return (data.get('label') or {}).get(lang) or ''
+    except:
+        return ''
+
+def _get_group_resource(g, lang):
     rv = hal()
     rv._l('self', api_url(
-        'api.get_public_group', group_id=f.group_id))
-    rv._k('group_id', f.group_id)
-    rv._k('label', f.data.setdefault('label', {'en':None}).get('en'))
-    rv._k('multichoice', f.data.setdefault('multichoice', True))
+        'api.get_public_group', group_id=g.group_id))
+    rv._k('group_id', g.group_id)
+    rv._k('label', _getlabel(g.data,lang))
+    # TODO: GET actions should not mutate the data, move this to 
+    # POST and PUT.
+    rv._k('multichoice', g.data.setdefault('multichoice', True))
     rv._k('options', 
-          [{'group_option_id':fo.group_option_id, 'label':fo.data.setdefault(
-              'label', {'en':None}).get('en')}
-           for fo in f.options ])
+          [{'group_option_id':fo.group_option_id, 
+            'label':_getlabel(fo.data, lang)
+           } for fo in g.options ])
     return rv.document
 
 @route('/public/products', expects_params=True, expects_domain=True, 
@@ -72,9 +81,9 @@ def get_public_products(params, domain):
         # {'options': [...]}
         groups = json.loads(parse.unquote(params['groups']))
 
-        for f in groups:
+        for g in groups:
             subq = ProductGroupOption.filter(
-                ProductGroupOption.group_id.in_(f['options'])).subquery()
+                ProductGroupOption.group_id.in_(g['options'])).subquery()
             q = q.join(subq, Product.product_id==subq.c.product_id)
 
         #subq = qrs[1].subquery()
@@ -90,8 +99,8 @@ def get_public_products(params, domain):
     return rv.document, 200, []
 
 def grouped_query(q, group_id):
-    f = Group.query.filter(Group.group_id==group_id).subquery()
-    return q.join(f, f.c.group_id==Group.group_id)
+    g = Group.query.filter(Group.group_id==group_id).subquery()
+    return q.join(g, g.c.group_id==Group.group_id)
 
 @route('/public/product-resources', expects_params=True, expects_lang=True,
        expects_domain=True, authenticate=privacy_control, 
@@ -143,8 +152,6 @@ def _get_product_resource(p, lang):
     # NOTE: maybe we'll add this at some point
     #rv._k('unit_price', p.data.get('unit_price'))
     #rv._k('quantity_unit', p.data.get('quantity_unit'))
-    # TODO:
-    #rv._embed('groups', [_get_group_resource(f, True) for f in p.groups])
 
     return rv.document
 

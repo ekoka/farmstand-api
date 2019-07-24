@@ -49,8 +49,8 @@ from . import (
     groups,
     images,
     accounts,
-    #inquiries,
-    quotations,
+    inquiries,
+    #quotations,
     meta,
     security,
 )

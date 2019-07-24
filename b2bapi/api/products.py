@@ -12,6 +12,7 @@ from b2bapi.db.models.products import Product
 from b2bapi.db.models.meta import ProductType, Field
 from b2bapi.db.models.groups import GroupOption
 from b2bapi.utils.uuid import clean_uuid
+import uuid
 from b2bapi.db.schema import generic as product_schema
 from ._route import (
     route, json_abort, hal,
@@ -30,10 +31,10 @@ def _update_search_index(product, lang):
                   if f.get('searchable')]
     search = []
     for f in searchable:
-        value = f.get('value')
+        value = f.get('value') or ''
         if f.get('localized'):
             try:
-                value = f['value'][lang]
+                value = f['value'][lang] or ''
             except (AttributeError, KeyError) as e:
                 value = ''
         search.append(value)
@@ -124,41 +125,132 @@ def _field_schema(f, lang):
     return field
 
 def _recent_products(domain_id, params, lang):
-    q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
-    q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
-    return q.all()
+    limit = 2
+    #q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
+    #q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
+    query = '''
+    select p.product_id
+    from products p
+    {lastproduct_subquery}
+    where p.domain_id=:domain_id
+    {lastproduct_filter}
+    order by p.priority asc, p.updated_ts desc, p.product_id desc
+    limit :limit
+    '''
+
+    qparams = dict(
+        limit=limit,
+        domain_id=domain_id,
+    )
+
+    lastproduct_filter = lastproduct_subquery = ''
+    if params.get('last_product'):
+        lastproduct_subquery = ''', (
+        select product_id, updated_ts, priority
+        from products
+        where domain_id=:domain_id 
+            and product_id = :last_product_id
+        ) lastproduct
+        '''
+        lastproduct_filter = '''
+        and (
+            p.priority > lastproduct.priority or 
+            (p.priority = lastproduct.priority and 
+                p.updated_ts < lastproduct.updated_ts) or
+            (p.priority = lastproduct.priority and
+                p.updated_ts = lastproduct.updated_ts and
+                p.product_id < lastproduct.product_id)
+        )
+        '''
+        qparams['last_product_id'] = params['last_product']
+
+    query = db.text(query.format(
+        lastproduct_subquery=lastproduct_subquery, 
+        lastproduct_filter=lastproduct_filter, 
+    ))
+    return _execute_product_query(query=query, params=qparams)
 
 def _search_products(params, domain_id, lang):
+    limit = 2
     language = app.config['LOCALES'].get(lang,{}).get('language', 'simple')
+    qparams = dict(
+        domain_id=domain_id,
+        language=language,
+        limit=limit,
+    )
     statement = """
-    select product_id from product_search
-    where search @@ to_tsquery(:language, :search)
-    and domain_id = :domain_id
-    order by ts_rank(search, to_tsquery(:language, :search))
+    select ps.product_id, ts_rank(search, query) rank
+    from product_search ps, 
+        to_tsquery(:language, :search) query
+        {lastproduct_subquery} 
+    where domain_id=:domain_id 
+        {lastproduct_filter}
+        and search @@ query
+    order by rank desc, product_id desc
+    limit :limit
     """
-    search = '|'.join(s.strip() for s in params['q'].split(' ') if s.strip())
-    return db.session.execute(statement, {
-        'search': search, 
-        'domain_id': domain_id,
-        'language': language,
-    }).fetchall()
+    #order by ts_rank(search, to_tsquery(:language, :search)) desc, product_id desc
+    lastproduct_filter = lastproduct_subquery = ''
+    if params.get('last_product'):
+        lastproduct_subquery = '''
+        , (select product_id, ts_rank(search, to_tsquery(:language, :search)) rank
+        from product_search 
+        where domain_id=:domain_id and product_id = :last_product_id
+        ) lastproduct
+        '''
+        lastproduct_filter = ('and (lastproduct.rank, lastproduct.product_id) '
+                              '> (rank, ps.product_id)')
+        qparams['last_product_id'] = params['last_product']
+
+    statement = statement.format(
+        lastproduct_subquery=lastproduct_subquery,
+        lastproduct_filter=lastproduct_filter,
+    ) 
+
+    qparams['search'] = '|'.join(s.strip() for s in params['q'].split(' ') 
+                                 if s.strip())
+    return _execute_product_query(query=statement, params=qparams)
+
+def _execute_product_query(query, params):
+
+    limit = params.get('limit')
+    if limit:
+        # fetch one more element just to see if it's possible
+        params['limit'] = limit + 1
+    rows = db.session.execute(query, params).fetchall()
+
+    if limit and len(rows) > limit:
+        # if it's possible to fetch the extra item 
+        # it implies that there may be more rows. 
+        has_more = True
+        rows.pop(-1)
+    else:
+        has_more = False
+
+    return {
+        'product_ids':  [clean_uuid(r.product_id) for r in rows],
+        'last_product': rows[-1].product_id if rows else None,
+        'has_more': has_more,
+    }
 
 @route('/products', expects_params=True, expects_domain=True,
        expects_lang=True, readonly=True)
        #authorize=domain_owner_authz, expects_lang=True, readonly=True)
 def get_products(params, domain, lang):
     if params.get('q'):
-        products = _search_products(
+        result = _search_products(
             params=params, domain_id=domain.domain_id, lang=lang)
     else:
-        products = _recent_products(
+        result = _recent_products(
             params=params, domain_id=domain.domain_id, lang=lang)
 
     product_url = api_url('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', api_url('api.get_products', **params))
     rv._l('productlist:product', product_url, unquote=True, templated=True)
-    rv._k('product_ids', [p.product_id for p in products])
+    rv._k('product_ids', result['product_ids'])
+    rv._k('last_product', result['last_product'])
+    rv._k('has_more', result['has_more'])
     return rv.document, 200, []
 
 @route('/product-resources', expects_params=True, expects_lang=True,

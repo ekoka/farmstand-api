@@ -1,6 +1,7 @@
 import dramatiq
 from datetime import datetime
 from b2bapi.db.models.accounts import Signin
+from b2bapi.db.models.inquiries import Inquiry
 from b2bapi.db import db
 from b2bapi.utils.mailer import Gmail as Mailer
 from b2bapi.utils.uuid import clean_uuid
@@ -32,6 +33,17 @@ def send_passcode():
         except:
             raise
     return True
+
+@dramatiq.actor(actor_name='productlist.send_inquiries')
+def send_inquiries():
+    app = dramatiq.flask_app
+    unsent = {'email': {'sent':False}}
+    inquiries = Inquiry.query.filter(Inquiry.data.comparator.contains(unsent))
+    for i in inquiries:
+        app.logger.info(i.domain_id)
+        i.data['email']['sent'] = True
+        i.data['email']['timestamp'] = datetime.utcnow().timestamp()
+    db.session.commit()
 
 
 
