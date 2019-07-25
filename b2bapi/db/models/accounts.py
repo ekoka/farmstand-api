@@ -22,8 +22,7 @@ class Account(db.Model):
     confirmed = db.Column(db.Boolean, default=False)
 
     # these fields should be localized in the `data` json 
-    localized_fields = ['company', 'role', 'summary', 'address', 'city',
-                        'state_province', 'country']
+    localized_fields = ['organization', 'role', 'bio', 'location',]
 
     @property
     def primary_email(self):
