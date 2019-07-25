@@ -5,12 +5,19 @@ from b2bapi.db.models.inquiries import Inquiry
 from b2bapi.db import db
 from b2bapi.utils.mailer import Gmail as Mailer
 from b2bapi.utils.uuid import clean_uuid
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-def send(subject, content, to):
+env = Environment(
+    loader=FileSystemLoader('b2bapi/scheduled/templates'),
+    autoescape=select_autoescape('html'),
+)
+
+def send(subject, to, content=None, html_content=None):
     config = dramatiq.flask_app.config
     login = config['MAIL_LOGIN']
     password = config['MAIL_PASSWORD']
-    m = Mailer(login, password, subject=subject, content=content, to=to)
+    m = Mailer(login, password, subject=subject, to=to, 
+               content=content, html_content=html_content,)
     return m.send()
 
 @dramatiq.actor(actor_name='productlist.send_passcode')
@@ -40,12 +47,50 @@ def send_inquiries():
     unsent = {'email': {'sent':False}}
     inquiries = Inquiry.query.filter(Inquiry.data.comparator.contains(unsent))
     for i in inquiries:
-        app.logger.info(i.domain_id)
-        i.data['email']['sent'] = True
-        i.data['email']['timestamp'] = datetime.utcnow().timestamp()
-    db.session.commit()
+        admin = i.domain.admins[0]
+        inquiry = prep_inquiry_data(i)
+        # TODO: ensure that there's always at least one admin
+        html_content = load_inquiry_template(inquiry)
+        to = admin.email
+        try: 
+            send(subject="New inquiry from your Productlist",
+                 html_content=html_content, to=to)
+            i.data['email'] = {
+                'sent': True,
+                'timestamp': datetime.utcnow().timestamp()
+            }
+            db.session.commit()
+        except:
+            db.session.rollback()
+            raise
 
+def prep_inquiry_data(inquiry):
+    user = inquiry.account
+    products = []
+    for p in  inquiry.products:
+        products.append({
+            'name': get_field(p.product, 'name', inquiry.data['lang']),
+            'number': get_field(p.product, 'number', inquiry.data['lang']),
+            'url': 'https://someplaceholder.com/url',
+            'admin_url': 'https://someplaceholder.com/admin_url',
+            'quantity': p.quantity,
+            'comments': p.data.get(
+                'messages', [{}])[0].get('comments', '') or '',
+        })
+    comments = inquiry.data.get('messages', [{}])[0].get('comments', '') or ''
+    return dict(user=user, products=products, comments=comments)
 
+def load_inquiry_template(inquiry):
+    t = env.get_template('inquiry.html')
+    return t.render(**inquiry)
+
+def get_field(record, name, lang):
+    for f in record.fields.get('fields', []):
+        if f.get('name')==name:
+            if f.get('localized'): 
+                return f.get('value', {}).get(lang) 
+            else:
+                return f.get('value')
 
 #@dramatiq.actor(actor_name='productlist.send_activation_email')
 #def send_activation_email():

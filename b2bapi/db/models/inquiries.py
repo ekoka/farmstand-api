@@ -25,7 +25,9 @@ class Inquiry(db.Model, db.DomainMixin):
     - email status
     """
 
-    products = db.relationship('InquiryProduct')
+    domain = db.relationship('Domain', backref='inquiries')
+    products = db.relationship('InquiryProduct', backref='inquiry')
+    account = db.relationship('Account')
 
 class InquiryProduct(db.Model, db.DomainMixin):
     __tablename__ = 'inquiry_products'
@@ -57,3 +59,5 @@ class InquiryProduct(db.Model, db.DomainMixin):
             'inquiry_products_product_id_fkey', ondelete='CASCADE',
         ),
     )
+
+    product = db.relationship('Product', backref='inquiries', viewonly=True)

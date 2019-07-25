@@ -25,6 +25,13 @@ class Domain(db.Billable):
             'languages': ['en'],
         }
 
+    admin_join = "(DomainAccount.role=='admin') &\
+        (DomainAccount.account_id==Account.account_id)"
+
+    admins = db.relationship(
+        'Account', secondary='domain_accounts', viewonly=True,
+        secondaryjoin=admin_join, backref='admin_domains')
+
 class DomainAccount(db.Model, db.DomainMixin):
     __tablename__ = 'domain_accounts'
 
