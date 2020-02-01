@@ -54,7 +54,8 @@ def _verify_password_token(data):
 @route('/id-token', methods=['POST'], domained=False, expects_data=True)
 def post_id_token(data):
     """
-    the ID Token is in fact the Refresh token.
+    ID Token is the token provided during registration by either the OAuth
+    authority or by Productlist (for email auth, or password auth).
     """
     token_data = _verify_auth_token(data)
     if not token_data:

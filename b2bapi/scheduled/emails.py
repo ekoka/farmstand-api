@@ -3,7 +3,6 @@ from datetime import datetime
 from b2bapi.db.models.accounts import Signin
 from b2bapi.db.models.inquiries import Inquiry
 from b2bapi.db import db
-from b2bapi.utils.mailer import Gmail as Mailer
 from b2bapi.utils.uuid import clean_uuid
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -13,7 +12,9 @@ env = Environment(
 )
 
 def send(subject, to, content=None, html_content=None):
+    #TODO: make a single reusable instance of mailer
     config = dramatiq.flask_app.config
+    Mailer = config.MAILER
     login = config['MAIL_LOGIN']
     password = config['MAIL_PASSWORD']
     m = Mailer(login, password, subject=subject, to=to, 
@@ -38,6 +39,7 @@ def send_passcode():
             s.sent = True
             db.session.commit()
         except:
+            db.session.rollback()
             raise
     return True
 
