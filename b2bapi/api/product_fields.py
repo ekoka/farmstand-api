@@ -8,7 +8,7 @@ from b2bapi.db.models.meta import Field
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from .validation.meta import add_field, edit_field
-from ._route import route
+from ._route import route, api_url
 
 def _get_field(field_id):
 
@@ -43,7 +43,7 @@ def post_field(data):
         db.session.rollback()
         abort(409)
 
-    redirect_url = url_for('api.get_field', field_id=clean_uuid(record.field_id))
+    redirect_url = api_url('api.get_field', field_id=clean_uuid(record.field_id))
     return ({'location':redirect_url, 'field_id':clean_uuid(record.field_id)}, 
              201, [('Location',redirect_url)])
 
@@ -71,7 +71,7 @@ def put_field(field_id, data):
         abort(400)
 
     db.session.flush()
-    redirect_url = url_for('api.get_field', field_id=clean_uuid(record.field_id))
+    redirect_url = api_url('api.get_field', field_id=clean_uuid(record.field_id))
     return ({}, 200, [])
 
 @route('/fields/<field_id>', methods=['DELETE'])
@@ -86,7 +86,7 @@ def delete_field(field_id):
 
 def field_resource(record):
     rv = {
-        'self': url_for('api.get_field', field_id=clean_uuid(record.field_id)),
+        'self': api_url('api.get_field', field_id=clean_uuid(record.field_id)),
         'field_id': clean_uuid(record.field_id),
         'name': record.name,
         'field_type': record.field_type,
@@ -106,11 +106,11 @@ def get_field(field_id):
 @route('/fields', methods=['GET'])
 def get_fields():
     rv = {
-        'self': url_for('api.get_fields'),
+        'self': api_url('api.get_fields'),
         'fields': [
             field_resource(rec) for rec in Field.query.filter_by(
              domain_id=g.domain['domain_id']).all()],
-            #{'url': url_for('api.get_field', field_id=str(rec.field_id)),
+            #{'url': api_url('api.get_field', field_id=str(rec.field_id)),
             # 'name': rec.name} for rec in Field.query.filter_by(
             # domain_id=g.domain['domain_id']).all()],
     }

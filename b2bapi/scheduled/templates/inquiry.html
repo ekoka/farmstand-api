@@ -1,0 +1,47 @@
+{% extends 'email_layout.html' %}
+
+{% block content %}
+<p>Hi, you have received a new inquiry. </p>
+
+<p>The inquiry was sent from this profile</p>
+
+<p>{{user.first_name}} {{user.last_name}}</p>
+<p>{{user.email}}</p>
+
+<h4>Items inquired about</h4>
+
+{% for p in products %}
+    <p>Product name: {{p.name}}<p>
+    <p>Product number: {{p.number}}<p>
+    <p>Product url: {{p.url}}<p>
+    <p>Product admin url: {{p.admin_url}}<p>
+    <p>Quantity requested: {{p.quantity}}</p>
+    <p>Comments / questions about this item: {{p.comments}}</p>
+    <br>
+{% endfor %}
+
+<h4>General comments</h4>
+<p>{{comments}}</p>
+
+<h4>Contact information</h4>
+{#
+<p>{{contact.title}} {{contact.first_name}} {{contact.last_name}}</p>
+<p>{{contact.email}}</p>
+
+<h4>Billing address</h4>
+<p>{{billing.address1}}</p>
+<p>{{billing.address2}}</p>
+<p>{{billing.city}}</p>
+<p>{{billing.state_province}}</p>
+<p>{{billing.country}}</p>
+<p>{{billing.zip_postal_code}}</p>
+
+<h4>Shipping address</h4>
+<p>{{billing.address1}}</p>
+<p>{{billing.address2}}</p>
+<p>{{billing.city}}</p>
+<p>{{billing.state_province}}</p>
+<p>{{billing.country}}</p>
+<p>{{billing.zip_postal_code}}</p>
+#}
+{% endblock content %}

@@ -8,7 +8,7 @@ class CreateView(schema.DDLElement):
 # making this specific to postgresql
 @compiles(CreateView, 'postgresql')
 def visit_pg_create_view(element, compiler):
-    template = u"CREATE OR REPLACE VIEW {name} AS {select};"
+    template = "CREATE OR REPLACE VIEW {name} AS {select};"
     select = compiler.sql_compiler.process(element.selectable, 
                                            literal_binds=True)
     rv = template.format(name=element.name, select=select)
@@ -19,7 +19,7 @@ class DropView(schema.DDLElement):
         self.name = name 
 @compiles(DropView, 'postgresql')
 def visit_pg_drop_view(element, compiler):
-    return u"DROP VIEW IF EXISTS {name};".format(name=element.name)
+    return "DROP VIEW IF EXISTS {name};".format(name=element.name)
 
 def create_view(view_name, query, metadata):
     CreateView(view_name, query).execute_at('after_create', metadata)

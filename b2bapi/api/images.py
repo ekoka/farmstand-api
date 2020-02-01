@@ -15,11 +15,14 @@ from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 
-from ._route import route, url_for, json_abort, hal
+from ._route import (
+    route, api_url, json_abort, hal,
+    domain_owner_authorization as domain_owner_authz,
+)
 from .validation import images as validators
 
 @route('/source-images', methods=['POST'], expects_files=['image'],
-       expects_domain=True, authenticate=True)
+       expects_domain=True, authorize=domain_owner_authz)
 def post_source_image(domain, image=None):
     # TODO: move this initialization inside POSTing of SourceImage
     source_file = image[0]
@@ -66,23 +69,24 @@ def post_source_image(domain, image=None):
 
     rv = hal()
     rv._k('source_image_id', image_id)
-    #rv._l('source_image', url_for('api.get_source_image', image_id=image_id))
+    #rv._l('source_image', api_url('api.get_source_image', image_id=image_id))
     if main_base:
         rv._k('image_id', main_base.base_image_id)
-        rv._l('image', url_for('api.get_image', image_id=main_base.base_image_id))
+        rv._l('image', api_url('api.get_image', image_id=main_base.base_image_id))
     return rv.document, 200, ()
 
-@route('images', expects_domain=True, expects_params=True, authenticate=True)
+@route('images', expects_domain=True, expects_params=True,
+       authorize=domain_owner_authz)
 def get_images(domain, params):
     params = validators.aspect_ratios.validate(params)
     rv = hal()
-    rv._l('self',url_for('api.get_images', **params))
+    rv._l('self',api_url('api.get_images', **params))
     imgquery = BaseImage.query.filter_by(domain_id=domain.domain_id)
     images = []
     for i in imgquery.all():
         img_resource = hal()
         img_resource._k('image_id', i.base_image_id)
-        img_resource._l('self', url_for('api.get_image', image_id=i.base_image_id))
+        img_resource._l('self', api_url('api.get_image', image_id=i.base_image_id))
         if params:
             img_resource._k('aspect_ratios', img_aspect_ratios(i, **params))
         images.append(img_resource.document)
@@ -151,7 +155,7 @@ def _image_resource(image, **params):
 
     rv = hal() 
     rv._k('image_id', image.base_image_id)
-    rv._l('self', url_for('api.get_image', image_id=image.base_image_id))
+    rv._l('self', api_url('api.get_image', image_id=image.base_image_id))
     rv._k('aspect_ratios', aspect_ratios)
     return rv
 
@@ -166,20 +170,20 @@ def get_image(image_id, domain):
     return rv.document, 200, []
 
 @route('/products/<product_id>/images', expects_domain=True, 
-       authenticate=True, expects_params=True)
+       authorize=domain_owner_authz, expects_params=True)
 def get_product_images(product_id, domain, params):
     product_imgs = ProductImage.query.filter_by(
         product_id=product_id, domain_id=domain.domain_id).all()
     product_imgs.sort(key=lambda pi: pi.data.get('position'))
     rv = hal()
-    rv._l('self', url_for('api.get_product_images', product_id=product_id))
+    rv._l('self', api_url('api.get_product_images', product_id=product_id))
     images = [_image_resource(prodimg.image).document 
               for prodimg in product_imgs]
     rv._embed('images', images)
     return rv.document, 200, []
 
 @route('/products/<product_id>/images', methods=['PUT'], expects_domain=True,
-       expects_data=True, authenticate=True)
+       expects_data=True, authorize=domain_owner_authz)
 def put_product_images(product_id, domain, data):
     db.session.execute(db.text(
         'delete from product_images '

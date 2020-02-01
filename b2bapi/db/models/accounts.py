@@ -18,11 +18,17 @@ class Account(db.Model):
     _password = db.Column('password', db.Unicode)
     lang = db.Column(db.Unicode, default='en')
     data = db.Column(db.JSONB, default=dict)
+    id_token = db.Column(db.Unicode, unique=True, nullable=True)
     confirmed = db.Column(db.Boolean, default=False)
 
     # these fields should be localized in the `data` json 
-    localized_fields = ['company', 'role', 'summary', 'address', 'city',
-                        'state_province', 'country']
+    localized_fields = ['organization', 'role', 'bio', 'location',]
+
+    @property
+    def primary_email(self):
+        for e in self.emails:
+            if e.primary and e.verified:
+                return e
 
     @hybrid_property
     def password(self):
@@ -39,6 +45,21 @@ class Account(db.Model):
         except AttributeError:
             return False
 
+    def authorize(self, domain, action, **kw):
+        if action is True: # basic authz
+            return self.account_id==domain.owner_account_id
+
+        if callable(action):
+            return action(domain, self)
+
+    def authorization(fnc, roles):
+        @functools.wraps(fnc)
+        def wrapper(*a, **kw):
+            authorized = app.config.get('DEV_MODE', False)
+            # if a resource must go through authorization a current_account should
+            # be present in g.
+            acc = g.current_account
+            authorized = acc.authorize(g.domain, roles, **kw) or authorized
 
 class PaymentSource(db.Model):
     __tablename__ = 'payment_sources'
@@ -94,21 +115,6 @@ class Invite(db.Model, db.DomainMixin):
     #accept_date = db.Column(db.DateTime)
     #status_change = db.Column(db.DateTime)
 
-
-class AccessRequest(db.Model, db.DomainMixin):
-    """
-    User can request access to a merchant's catalog.
-    """
-    __tablename__ = 'access_requests'
-    account_id = db.Column(
-        None, db.ForeignKey('accounts.account_id'), primary_key=True)
-    status = db.Column(db.Unicode)
-    #request_time = db.Column(db.DateTime)
-    #role = db.Column(db.Unicode, default="user")
-
-    #__table_args__ = (
-    #    db.UniqueConstraint('domain_id', 'account_id'),
-    #)
 
 class User(db.Model, db.DomainMixin):
     """

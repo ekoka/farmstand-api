@@ -8,11 +8,11 @@ from b2bapi.db.models.meta import ProductType
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from .validation.meta import add_product_type, edit_product_type
-from ._route import route
+from ._route import route, api_url
 
 def product_type_resource(record):
     rv = {
-        'self': url_for('api.get_product_type', 
+        'self': api_url('api.get_product_type', 
                        product_type_id=record.product_type_id),
         'product_type_id': record.product_type_id,
         'name': record.name,
@@ -39,12 +39,12 @@ def get_product_type(product_type_id):
 @route('/product-types')
 def get_product_types():
     rv = {
-        'self': url_for('api.get_product_types'),
+        'self': api_url('api.get_product_types'),
         'product_types': [
             product_type_resource(rec)
             #{'name': rec.name,
             # 'product_type_id': rec.product_type_id,
-            # 'url': url_for('api.get_product_type',
+            # 'url': api_url('api.get_product_type',
             #               product_type_id=rec.product_type_id),
             #} 
             for rec in ProductType.query.all() ],
@@ -67,7 +67,7 @@ def post_product_type(data):
         db.session.rollback()
         abort(409)
 
-    redirect_url = url_for('api.get_product_type', 
+    redirect_url = api_url('api.get_product_type', 
                           product_type_id=record.product_type_id)
     return ({'location':redirect_url,
              'product_type_id':record.product_type_id},
@@ -90,7 +90,7 @@ def put_product_type(product_type_id, data):
         db.session.rollback()
         abort(409)
 
-    redirect_url = url_for('api.get_product_type',
+    redirect_url = api_url('api.get_product_type',
                           product_type_id=record.product_type_id)
     return ({'location':redirect_url, 
              'product_type_id':record.product_type_id}, 200,

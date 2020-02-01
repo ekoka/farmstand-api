@@ -1,4 +1,3 @@
-import uuid
 import simplejson as json
 import copy
 from datetime import datetime as dtm
@@ -13,59 +12,94 @@ from b2bapi.db.models.products import Product
 from b2bapi.db.models.meta import ProductType, Field
 from b2bapi.db.models.groups import GroupOption
 from b2bapi.utils.uuid import clean_uuid
+import uuid
 from b2bapi.db.schema import generic as product_schema
-from ._route import route, json_abort, hal
+from ._route import (
+    route, json_abort, hal,
+    domain_owner_authorization as domain_owner_authz,
+    api_url,
+)
 from .product_utils import patch_record, Mismatch
-
-def _delocalize_product_field(field, lang):
-    rv = dict(**field)
-    if field.get('localized'):
-        rv['value'] = rv.setdefault('value', {}).get(lang)
-    return rv
-
-def _localize_product_fields(fields, lang):
-    for field in fields:
-        if 'value' not in field:
-            continue
-        if field.get('localized'):
-            field['value'] = {lang: field['value']}
 
 from .images import img_aspect_ratios
 
 from .validation.products import (add_product, edit_product, edit_product_members)
 
-def _products_query(domain_id, **params):
-    q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
-    q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
-    return q
+def _update_search_index(product, lang):
+    language = app.config['LOCALES'].get(lang,{}).get('language', 'simple')
+    searchable = [f for f in product.fields.get('fields', [])
+                  if f.get('searchable')]
+    search = []
+    for f in searchable:
+        value = f.get('value') or ''
+        if f.get('localized'):
+            try:
+                value = f['value'][lang] or ''
+            except (AttributeError, KeyError) as e:
+                value = ''
+        search.append(value)
 
-@route('/products', expects_params=True, expects_domain=True,
-       authenticate=True, expects_lang=True, readonly=True)
-def get_products(params, domain, lang):
-    products = _products_query(domain_id=domain.domain_id).all()
-    product_url = url_for('api.get_product', product_id='{product_id}')
-    rv = hal()
-    rv._l('self', url_for('api.get_products', **params))
-    rv._l('productlist:product', product_url, unquote=True, templated=True)
-    rv._k('product_ids', [p.product_id for p in products])
-    return rv.document, 200, []
 
-@route('/product-resources', expects_params=True, expects_lang=True,
-       expects_domain=True, authenticate=True, readonly=True)
-def get_product_resources(params, domain, lang):
-    product_ids = params.getlist('pid')
-    q = Product.query.filter_by(domain_id=domain.domain_id)
+    try:
+        statement = '''
+        insert into product_search (domain_id, product_id, lang, search)
+        values (:domain_id, :product_id, :lang, to_tsvector(:language, :search))
+        '''
+        db.session.begin_nested()
+        db.session.execute(statement, {
+            'domain_id':product.domain_id,
+            'lang':lang,
+            'product_id':product.product_id,
+            'search': ' '.join(search),
+            'language': language,
+        })
+        db.session.commit()
+    except sql_exc.IntegrityError:
+        db.session.rollback()
+        statement = '''
+        update product_search 
+        set search = to_tsvector(:language, coalesce(:search))
+        where product_id=:product_id and domain_id=:domain_id and lang=:lang
+        '''
+        db.session.begin_nested()
+        try:
+            db.session.execute(statement, {
+                'domain_id':product.domain_id,
+                'lang':lang,
+                'product_id':product.product_id,
+                'language': language,
+                'search': ' '.join(search)})
+            db.session.commit()
+        except:
+            db.session.rollback()
+            raise
 
-    if product_ids:
-        q = q.filter(Product.product_id.in_(product_ids))
-    products = q.all()
 
-    rv = hal()
-    rv._l('self', url_for('api.get_product_resources'))
-    rv._k('product_ids', [p.product_id for p in products])
-    rv._embed('products', [_get_product_resource(p, lang) for p in products])
-    return rv.document, 200, []
+def _delocalize_product_field(field, lang):
+    """
+    delocalize fields, i.e. remove the lang context from field
+    """
+    rv = dict(**field)
+    if field.get('localized'):
+        try:
+            rv['value'] = rv.setdefault('value', {}).get(lang)
+        except AttributeError:
+            pass
+        rv['localized'] = True
 
+    return rv
+
+def _localize_product_fields(fields, lang):
+    """
+    localize fields, i.e. add a lang context
+    """
+    for field in fields:
+        # if field has no value, skip
+        if 'value' not in field:
+            continue
+        # if field has the `localized` flag, localize the value
+        if field.get('localized'):
+            field['value'] = {lang: field['value']}
 
 def _localized_field_schema(field, lang):
     rv = {}
@@ -86,28 +120,175 @@ def _field_schema(f, lang):
     field = copy.deepcopy(f['field'])
     field['display'] = f.get('display', False)
     field['searchable'] = f.get('searchable', False)
+    field['localized'] = f.get('localized', False)
     field['schema'] = _localized_field_schema(field, lang)
     return field
+
+def _recent_products(domain_id, params, lang):
+    limit = 2
+    #q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
+    #q = q.order_by(Product.priority.asc()).order_by(Product.updated_ts.desc())
+    query = '''
+    select p.product_id
+    from products p
+    {lastproduct_subquery}
+    where p.domain_id=:domain_id
+    {lastproduct_filter}
+    order by p.priority asc, p.updated_ts desc, p.product_id desc
+    limit :limit
+    '''
+
+    qparams = dict(
+        limit=limit,
+        domain_id=domain_id,
+    )
+
+    lastproduct_filter = lastproduct_subquery = ''
+    if params.get('last_product'):
+        lastproduct_subquery = ''', (
+        select product_id, updated_ts, priority
+        from products
+        where domain_id=:domain_id 
+            and product_id = :last_product_id
+        ) lastproduct
+        '''
+        lastproduct_filter = '''
+        and (
+            p.priority > lastproduct.priority or 
+            (p.priority = lastproduct.priority and 
+                p.updated_ts < lastproduct.updated_ts) or
+            (p.priority = lastproduct.priority and
+                p.updated_ts = lastproduct.updated_ts and
+                p.product_id < lastproduct.product_id)
+        )
+        '''
+        qparams['last_product_id'] = params['last_product']
+
+    query = db.text(query.format(
+        lastproduct_subquery=lastproduct_subquery, 
+        lastproduct_filter=lastproduct_filter, 
+    ))
+    return _execute_product_query(query=query, params=qparams)
+
+def _search_products(params, domain_id, lang):
+    limit = 2
+    language = app.config['LOCALES'].get(lang,{}).get('language', 'simple')
+    qparams = dict(
+        domain_id=domain_id,
+        language=language,
+        limit=limit,
+    )
+    statement = """
+    select ps.product_id, ts_rank(search, query) rank
+    from product_search ps, 
+        to_tsquery(:language, :search) query
+        {lastproduct_subquery} 
+    where domain_id=:domain_id 
+        {lastproduct_filter}
+        and search @@ query
+    order by rank desc, product_id desc
+    limit :limit
+    """
+    #order by ts_rank(search, to_tsquery(:language, :search)) desc, product_id desc
+    lastproduct_filter = lastproduct_subquery = ''
+    if params.get('last_product'):
+        lastproduct_subquery = '''
+        , (select product_id, ts_rank(search, to_tsquery(:language, :search)) rank
+        from product_search 
+        where domain_id=:domain_id and product_id = :last_product_id
+        ) lastproduct
+        '''
+        lastproduct_filter = ('and (lastproduct.rank, lastproduct.product_id) '
+                              '> (rank, ps.product_id)')
+        qparams['last_product_id'] = params['last_product']
+
+    statement = statement.format(
+        lastproduct_subquery=lastproduct_subquery,
+        lastproduct_filter=lastproduct_filter,
+    ) 
+
+    qparams['search'] = '|'.join(s.strip() for s in params['q'].split(' ') 
+                                 if s.strip())
+    return _execute_product_query(query=statement, params=qparams)
+
+def _execute_product_query(query, params):
+
+    limit = params.get('limit')
+    if limit:
+        # fetch one more element just to see if it's possible
+        params['limit'] = limit + 1
+    rows = db.session.execute(query, params).fetchall()
+
+    if limit and len(rows) > limit:
+        # if it's possible to fetch the extra item 
+        # it implies that there may be more rows. 
+        has_more = True
+        rows.pop(-1)
+    else:
+        has_more = False
+
+    return {
+        'product_ids':  [clean_uuid(r.product_id) for r in rows],
+        'last_product': rows[-1].product_id if rows else None,
+        'has_more': has_more,
+    }
+
+@route('/products', expects_params=True, expects_domain=True,
+       expects_lang=True, readonly=True)
+       #authorize=domain_owner_authz, expects_lang=True, readonly=True)
+def get_products(params, domain, lang):
+    if params.get('q'):
+        result = _search_products(
+            params=params, domain_id=domain.domain_id, lang=lang)
+    else:
+        result = _recent_products(
+            params=params, domain_id=domain.domain_id, lang=lang)
+
+    product_url = api_url('api.get_product', product_id='{product_id}')
+    rv = hal()
+    rv._l('self', api_url('api.get_products', **params))
+    rv._l('productlist:product', product_url, unquote=True, templated=True)
+    rv._k('product_ids', result['product_ids'])
+    rv._k('last_product', result['last_product'])
+    rv._k('has_more', result['has_more'])
+    return rv.document, 200, []
+
+@route('/product-resources', expects_params=True, expects_lang=True,
+       expects_domain=True, authorize=domain_owner_authz, readonly=True)
+def get_product_resources(params, domain, lang):
+    product_ids = params.getlist('pid')
+    q = Product.query.filter_by(domain_id=domain.domain_id)
+
+    if product_ids:
+        q = q.filter(Product.product_id.in_(product_ids))
+    products = q.all()
+
+    rv = hal()
+    rv._l('self', api_url('api.get_product_resources'))
+    rv._k('product_ids', [p.product_id for p in products])
+    rv._embed('products', [_get_product_resource(p, lang) for p in products])
+    return rv.document, 200, []
 
 # NOTE: just an alias route
 @route('/product-template', endpoint='get_product_template', expects_lang=True)
 @route('/product-schema', expects_lang=True) 
 def get_product_schema(lang):
     rv = hal()
-    rv._l('self', url_for('api.get_product_schema'))
+    rv._l('self', api_url('api.get_product_schema'))
     rv._k('name', product_schema['name'])
     rv._k('fields', [_field_schema(f, lang) 
                      for f in product_schema['schema']['fields']])
     return rv.document, 200, []
 
-@route('/products/<product_id>/json', authenticate=True, expects_domain=True)
+@route('/products/<product_id>/json', authorize=domain_owner_authz,
+       expects_domain=True)
 def get_product_json(product_id, domain):
     product = _get_product(product_id, domain.domain_id)
     data = json.dumps(product.fields, indent=4)
     return {'json':data}, 200, []
 
-@route('/products/<product_id>/json', methods=['put'], authenticate=True,
-       expects_domain=True, expects_data=True)
+@route('/products/<product_id>/json', methods=['put'],expects_domain=True,
+       expects_data=True, authorize=domain_owner_authz,)
 def put_product_json(product_id, domain, data):
     product = _get_product(product_id, domain.domain_id)
     product.fields = data
@@ -124,8 +305,8 @@ def _get_product(product_id, domain_id):
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Product Not Found'})
 
-@route('/products/<product_id>', authenticate=True, expects_domain=True,
-       expects_params=True, expects_lang=True)
+@route('/products/<product_id>', authorize=domain_owner_authz,
+       expects_domain=True, expects_params=True, expects_lang=True)
 def get_product(product_id, domain, params, lang):
     # in the meantime, while waiting for validation
     partial = int(params.get('partial', False))
@@ -135,11 +316,11 @@ def get_product(product_id, domain, params, lang):
 
 def _get_product_resource(p, lang):
     rv = hal()
-    rv._l('self', url_for(
+    rv._l('self', api_url(
         'api.get_product', product_id=clean_uuid(p.product_id)))
-    rv._l('images', url_for(
+    rv._l('images', api_url(
         'api.get_product_images', product_id=clean_uuid(p.product_id)))
-    rv._l('groups', url_for(
+    rv._l('groups', api_url(
         'api.put_product_groups', product_id=clean_uuid(p.product_id)))
 
     rv._k('product_id', clean_uuid(p.product_id))
@@ -171,15 +352,6 @@ def _get_product_groups(p):
             fo.group_option_id))
     return rv
 
-
-def load_field_metas(schema_names, domain_id):
-    # query the db for fields with those names and produce
-    # a dict indexed by those names
-    fields = Field.query.filter(Field.domain_id==domain_id, 
-                                Field.name.in_(schema_names)).all()
-    return {f.name:f for f in fields}
-
-
 def populate_product(product, data, lang):
     for k,v in data.items():
         if k=='fields':
@@ -187,8 +359,9 @@ def populate_product(product, data, lang):
         else:
             setattr(product,k,v)
 
-
 def _merge_fields(productfields, fields, lang):
+    # productfields: database fields to update
+    # fields: fresh data to populate the fields
     # loop through the uploaded fields
     for f in fields:
         # if field is a text type
@@ -197,20 +370,25 @@ def _merge_fields(productfields, fields, lang):
             # to an empty dict, ready to take localized values
             f['value'], value = {}, f.get('value')
 
-            # now we search if the product already has an existing field with
-            # the same name
+            # now we search if the product already has an existing 
+            # field with the same name.
             for pf in productfields['fields']:
-                # if we find a matching field we give its (localized) value
-                # to our just uploaded field's value
+                # if we find a matching field we give its (localized) 
+                # value to our just uploaded field's value
                 if pf.get('name')==f['name']:
-                    f['value'] = pf.get('value', {})
+                    if not isinstance(pf['value'], dict):
+                        # if field was not localized before and now is
+                        # TODO: pick default lang from config
+                        default_lang = 'en'
+                        f['value'] = {default_lang: pf['value']}
+                    else:
+                        f['value'] = pf['value']
             # now whether the field was already present or not
             # we set the uploaded value as a localized value
             f['value'][lang] = value
 
     # we're now ready to replace the old fields with the new data set
     productfields['fields'] = fields
-
 
 def db_flush():
     try:
@@ -231,7 +409,8 @@ def post_product(data, lang):
     populate_product(p, data, lang)
     db.session.add(p)
     db_flush()
-    location = url_for('api.get_product', product_id=p.product_id, partial=False)
+    location = api_url(
+        'api.get_product', product_id=p.product_id, partial=False)
     rv = hal()
     rv._l('location', location)
     rv._k('product_id', p.product_id)
@@ -240,18 +419,18 @@ def post_product(data, lang):
 
 
 @route('/products/<product_id>', methods=['PUT'], expects_data=True,
-       authenticate=True, expects_domain=True, expects_lang=True)
+       authorize=domain_owner_authz, expects_domain=True, expects_lang=True)
 def put_product(product_id, data, domain, lang):
     data = edit_product.validate(data)
     p = _get_product(product_id, domain.domain_id)
     p.updated_ts = dtm.utcnow()
     populate_product(p, data, lang)
     db_flush()
+    _update_search_index(p, lang)
     return {}, 200, []
 
-@route('/products/<product_id>/groups',
-       methods=['PUT'], expects_domain=True, expects_data=True,
-       authenticate=True)
+@route('/products/<product_id>/groups', methods=['PUT'], expects_domain=True,
+       expects_data=True, authorize=domain_owner_authz)
 def put_product_groups(product_id, data, domain):
     #TODO: validation
     groups = data.get('groups') or  []
@@ -264,12 +443,12 @@ def put_product_groups(product_id, data, domain):
     return {}, 200, []
 
 @route('/products/details', expects_params=True, expects_domain=True,
-       authenticate=True, expects_lang=True)
+       authorize=domain_owner_authz, expects_lang=True)
 def get_product_details(domain, lang, params):
     #TODO: validate params
     product_ids = params.getlist('pid')
     rv = hal()
-    rv._l('self', url_for('api.get_product_details'))
+    rv._l('self', api_url('api.get_product_details'))
     products = Product.query.filter(
         Product.product_id.in_(product_ids),
         Product.domain_id==domain.domain_id,
@@ -325,7 +504,7 @@ def update_group_options(product_id, groups, domain_id):
 For a data to be patched to the product, it must already be present. 
 """
 @route('/products/<product_id>', methods=['PATCH'], expects_data=True,
-       expects_domain=True, expects_lang=True, authenticate=True)
+       expects_domain=True, expects_lang=True, authorize=domain_owner_authz)
 def patch_product(product_id, data, domain, lang):
     #TODO: validation
     #data = edit_product_members.validate(data)
@@ -386,18 +565,18 @@ def grouped_query(q, groups):
 #    #_p_order = lambda p: p.data['fields_order'][0]
 #    products = q.all()
 #    rv = {
-#        'self': url_for('api.get_products',**params),
+#        'self': api_url('api.get_products',**params),
 #        'products': [_product_summary(p, lang) for p in products],
 #    }
 #    return rv, 200, []
 
 #def _product_summary(p, lang):
 #    return {
-#        'self': url_for('api.get_product_summary', product_id=p.product_id),
+#        'self': api_url('api.get_product_summary', product_id=p.product_id),
 #        'product_id': p.product_id.hex,
 #        #'caption': _caption(p.data, lang),
 #        'captionable_fields': _caption_fields(p.data['fields'], lang),
-#        'url': url_for('api.get_product', product_id=p.product_id),
+#        'url': api_url('api.get_product', product_id=p.product_id),
 #    } 
 
 #def _caption_fields(fields, lang):
@@ -444,7 +623,7 @@ def grouped_query(q, groups):
 #    product_type = ProductType.query.filter_by(
 #        product_type_id=product_type_id, domain_id=domain_id).one()
 #    product = {
-#        'product_id': uuid.uuid4().hex,
+#        'product_id': uuid4().hex,
 #    }
 #    # if ProductType object has schema load it
 #    if product_type.schema:
@@ -456,7 +635,7 @@ def grouped_query(q, groups):
 #        product['fields'] = [field_metas[pf['name']].init_schema(pf) 
 #                             for pf in product_fields]
 #    rv = {
-#        'self': url_for(
+#        'self': api_url(
 #            'api.get_product_template', product_type_id=product_type_id),
 #        'template': product,
 #    }
@@ -472,8 +651,8 @@ def grouped_query(q, groups):
 #def get_product(product_id, lang):
 #    product = _get_product(product_id)
 #    rv = {
-#        'self': url_for('api.get_product', product_id=product_id),
-#        'summary_url': url_for('api.get_product_summary', product_id=product_id),
+#        'self': api_url('api.get_product', product_id=product_id),
+#        'summary_url': api_url('api.get_product_summary', product_id=product_id),
 #        #'caption': _caption(product, lang),
 #        'product_id': product_id,
 #        'fields': _fields(product.data.get('fields', []), lang),
@@ -482,19 +661,6 @@ def grouped_query(q, groups):
 
 
 # TODO: we'll eventually have to revert to this version or something close,
-# that is aware of Field schema stored in the database.
-#def _merge_fields(productdata, datafields, lang):
-#    field_types = {f.name: f.field_type for f in Field.query.all()}
-#    for df in datafields:
-#        field_type = field_types.get(df.get('name'))
-#        if field_type in Field.text_types:
-#            df['value'], value = {}, df.get('value') # uploaded value
-#            #if product.data and product.data.fields:
-#            for pf in productdata['fields']:
-#                if pf.get('name')==df['name']:
-#                    df['value'] = pf.get('value', {}) # localized values
-#            df['value'][lang] = value # merge localized and uploaded value 
-#    productdata['fields'] = datafields
 
 #def _fields(fields, lang):
 #    if not fields:
@@ -512,7 +678,7 @@ def grouped_query(q, groups):
 #        captionable = f.get('captionable'),
 #        searchable = f.get('searchable'),
 #        meta = {
-#            'url': url_for('api.get_field', field_id=clean_uuid(meta.field_id)),
+#            'url': api_url('api.get_field', field_id=clean_uuid(meta.field_id)),
 #            'name': f['name'],
 #            'field_id': clean_uuid(meta.field_id),
 #            'rel': 'FieldMeta',} if meta else None,

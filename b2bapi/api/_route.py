@@ -4,11 +4,12 @@ from flask import g, request, url_for, current_app as app, jsonify, abort
 from werkzeug import exceptions as werk_exc, Response
 from werkzeug.datastructures import MultiDict
 import re 
+import jwt
 
 from . import blueprint as bp
 from b2bapi.db import db
-from b2bapi.db.models.accounts import Account, AccountAccessKey as AAccessKey
-from b2bapi.db.models.domains import Domain
+from b2bapi.db.models.accounts import Account
+from b2bapi.db.models.domains import Domain, DomainAccount
 from b2bapi.utils.cachelib import json_response
 from b2bapi.utils import abc as uls_abc
 from b2bapi.utils.hal import Resource as Hal
@@ -17,6 +18,10 @@ def hal():
     return Hal()._c('productlist', 'https://api.productlist.io/doc/{rel}')
 
 # setting domain name in urls that expects it during `url_for()`
+def api_url(*a, **kw):
+    url = url_for(*a, **kw)
+    return '/'.join([app.config['API_HOST'].strip('/'), url.lstrip('/')])
+
 @bp.url_defaults
 def set_domain(endpoint, values):
     if 'domain' in values or not getattr(g, 'domain', None):
@@ -196,77 +201,94 @@ def lang_injector(fnc):
     return wrapper
 
 def access_token_authentication():
-    key = get_access_token_from_header()
+    scheme, token = request.headers['Authorization'].split(' ')
+    if scheme.lower()=='bearer':
+         token
     #key = get_access_token_from_cookie()
-    if not key:
+    if not token:
         return
+
     try:
-        access_token = AAccessKey.query.filter(AAccessKey.key==key).one()
-    except Exception as e:
-        return
-    if access_token:
-        g.access_token = access_token
-        g.current_account = access_token.account
+        secret = app.config['SECRET_KEY']
+        #TODO: move the algo in the config
+        payload = jwt.decode(token, secret, algorithms=['HS256'])
+    except (jwt.DecodeError, jwt.ExpiredSignatureError):
+        json_abort(400, {'error': 'Invalid token'})
+
+    g.access_token = payload
+    g.current_account = payload 
+    return True
+
+#def access_token_cookie_setter(fnc):
+#    @functools.wraps(fnc)
+#    def wrapper(*a, **kw):
+#        response = fnc(*a, **kw)
+#        try:
+#            # a view that expects an access_token to be set must place it in g 
+#            response.set_cookie(
+#                token='access_token',
+#                value=g.access_token,
+#                httponly=True,
+#                secure=app.config.get('SESSION_COOKIE_SECURE', False),
+#                domain=app.config.get('SERVER_DOMAIN', None),
+#            )
+#        except AttributeError:
+#            raise AttributeError(
+#                'View function must set access_token on `flask.g`')
+#        return response
+#    return wrapper
+
+
+#def get_csrf_token(fnc):
+#    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
+#    try:
+#        scheme, credentials = request.headers['Authorization'].split(' ')
+#        if scheme.lower() in access_token_schemes:
+#            return  credentials
+#        return request.args['access_token']
+#    except (ValueError, AttributeError, KeyError):
+#        pass
+
+#def get_access_token_from_cookie():
+#    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
+#    try:
+#        access_token = next(v for k,v in request.cookies.items() 
+#                          if k in access_token_schemes)
+#        return access_token
+#    except StopIteration: 
+#        pass
+
+def domain_privacy_control(**kw):
+    # make privacy level 'private' by default
+    if g.domain.meta.get('privacy', 'private')=='public':
         return True
-
-def access_token_cookie_setter(fnc):
-    @functools.wraps(fnc)
-    def wrapper(*a, **kw):
-        response = fnc(*a, **kw)
-        try:
-            # a view that expects an access_token to be set must place it in g 
-            response.set_cookie(
-                token='access_token',
-                value=g.access_token,
-                httponly=True,
-                secure=app.config.get('SESSION_COOKIE_SECURE', False),
-                domain=app.config.get('SERVER_DOMAIN', None),
-            )
-        except AttributeError:
-            raise AttributeError(
-                'View function must set access_token on `flask.g`')
-        return response
-    return wrapper
-
-
-def get_csrf_token(fnc):
-    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
     try:
-        scheme, credentials = request.headers['Authorization'].split(' ')
-        if scheme.lower() in access_token_schemes:
-            return  credentials
-        return request.args['access_token']
-    except (ValueError, AttributeError, KeyError):
-        pass
+        return access_token_authentication()
+    except (KeyError, AttributeError, ValueError): 
+        return False
 
-def get_access_token_from_header():
-    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
-    try:
-        scheme, credentials = request.headers['Authorization'].split(' ')
-        if scheme.lower() in access_token_schemes:
-            return  credentials
-        return request.args['access_token']
-    except (ValueError, AttributeError, KeyError):
-        pass
-
-def get_access_token_from_cookie():
-    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
-    try:
-        access_token = next(v for k,v in request.cookies.items() 
-                          if k in access_token_schemes)
-        return access_token
-    except StopIteration: 
-        pass
-
-def authentication(fnc):
-    @functools.wraps(fnc)
-    def wrapper(*a, **kw):
+def authentication(fnc, processor):
+    def default_processor(**kw):
         try:
             authenticated = access_token_authentication()
             #if not authenticated:
             #    authenticated = proxy_authentication()
         except (KeyError, AttributeError, ValueError) as e:
             authenticated = False
+        return authenticated
+
+    if processor is True:
+        processor = default_processor
+
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        authenticated = processor(**kw)
+        #try:
+        #    authenticated = access_token_authentication()
+        #    #if not authenticated:
+        #    #    authenticated = proxy_authentication()
+        #except (KeyError, AttributeError, ValueError) as e:
+        #    authenticated = False
 
         if authenticated:
             return fnc(*a, **kw)
@@ -276,41 +298,39 @@ def authentication(fnc):
                 'token.'})
     return wrapper
 
-def authorization(fnc, roles):
+# if a resource must go through authorization an access_token should
+# be present in g.
+def domain_owner_authorization(**kw):
+    domain_member = g.access_token['domain']==g.domain.name
+    return domain_member and g.access_token['role']=='admin'
+
+def account_owner_authorization(**kw):
+    return g.access_token['account_id']==kw.get('account_id')
+
+def domain_member_authorization(**kw):
+    # make privacy level 'private' by default
+    if g.domain.meta.get('privacy', 'private')=='public':
+        return True
+    member = g.access_token['domain']==g.domain.name
+    return member and g.access_token['role'] in ['admin', 'user']
+
+def authorization(fnc, processor):
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
-        authorized = app.config.get('DEV_MODE', False)
-        # if a resource must go through authorization a current_account should
+        dev_authorized = app.config.get('DEV_MODE', False)
+        # if a resource must go through authorization an access_token should
         # be present in g.
-        acc = g.current_account
-        authorized = acc.authorize(g.domain, roles, kw) or authorized
-        if authorized:
+        authorized = processor(**kw)
+
+        if authorized or dev_authorized:
             return fnc(*a, **kw)
-        json_abort(403, {'error': 'Forbidden: you do not have access to this '
-                         'resource.'})
+        json_abort(403, {'error': 'Not authorized'})
     return wrapper
-
-def account_injector(fnc):
-    @functools.wraps(fnc)
-    def wrapper(*a, **kw):
-        try:
-            kw['account'] = g.current_account
-        except AttributeError:
-            #TODO more specific error type
-            raise Exception('This resource requires an authenticated user.')
-        return fnc(*a, **kw)
-    return wrapper
-
 
 def role_injector(fnc):
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
-        try:
-            account = g.current_account
-            kw['role'] = 'admin' if account.authorize(roles=['admin', 'dev'])\
-                                 else None
-        except AttributeError:
-            kw['role'] = None
+        kw['role'] = g.access_token.get('role')
         return fnc(*a, **kw)
     return wrapper
 
@@ -337,12 +357,10 @@ def dbsession_rollback(fnc):
     return wrapper
 
 def auth_injector(fnc):
-    access_token_schemes = ['access_token', 'access-token', 'accesstoken']
-    @functools.wraps(fnc)
     def wrapper(*a, **kw):
         try:
             scheme, credentials = request.headers['Authorization'].split()
-            if scheme.lower() in access_token_schemes:
+            if scheme.lower()=='bearer':
                 kw['auth'] = {
                     'scheme': 'token',
                     'token': credentials,
@@ -369,6 +387,18 @@ def access_token_injector(fnc):
         kw['access_token'] = g.access_token
         return fnc(*a, **kw)
     return wrapper 
+
+def account_injector(fnc):
+    @functools.wraps(fnc)
+    def wrapper(*a, **kw):
+        try:
+            kw['account'] = g.current_account
+        except AttributeError:
+            raise AttributeError(
+                '`g.current_account` not set. Ensure that the authentication '
+                'processor sets it.')
+        return fnc(*a, **kw)
+    return wrapper
 
 def passthrough_view(fnc, passthrough_url):
     url = passthrough_url
@@ -418,11 +448,11 @@ def json_response_wrapper(fnc):
 def route(
     url_pattern, methods=None, domained=True, expects_data=False, 
     expects_params=False, expects_files=False, authenticate=False,
-    authorize=None, expects_lang=False, expects_account=False,
+    authorize=None, expects_lang=False, expects_access_token=False,
     expects_role=False, expects_domain=False, expects_auth=False,
     passthrough=None, cacheable=False, if_match=False, if_none_match=False,
     endpoint=None, readonly=False, set_cookie_token=False, 
-    expects_access_token=False,  **kw):
+    expects_account=False, **kw):
     """ function to map  route to function """
 
     if methods is None: methods = ['GET',]
@@ -441,6 +471,7 @@ def route(
             methods=_methods,
             domained=_domained,
             expects_account=expects_account, 
+            expects_access_token=expects_access_token, 
             expects_role=expects_role, 
             expects_domain=expects_domain, 
             expects_params=expects_params,
@@ -478,11 +509,6 @@ def route(
         if expects_lang:
             fnc = lang_injector(fnc)
 
-        if expects_account:
-            # cannot have account if user not authenticated
-            _authenticate = True
-            fnc = account_injector(fnc)
-
         if expects_domain:
             # domain are extracted from the route by default, in a preprocessor 
             # defined earlier in this module. Let's reinject them:
@@ -502,26 +528,34 @@ def route(
 
         if expects_role:
             # cannot have role without authentication
-            _authenticate = True
+            _authenticate = _authenticate or True
             fnc = role_injector(fnc)
+
+        if expects_access_token:
+            # cannot have access_token if user not authenticated
+            _authenticate = _authenticate or True
+            fnc = access_token_injector(fnc)
+
+        if expects_account:
+            # cannot have access_token if user not authenticated
+            if not _authenticate:
+                raise Exception(
+                    'The `expects_account` directive requires a user provided '
+                    'authentication processor.')
+            fnc = account_injector(fnc)
 
         if expects_auth:
             # cannot pass auth without authentication
-            _authenticate = True
+            _authenticate = _authenticate or True
             fnc = auth_injector(fnc)
-
-        if expects_access_token:
-            # cannot pass token without authentication
-            _authenticate = True
-            fnc = access_token_injector(fnc)
 
         if authorize:
             # cannot have authz without authn
-            _authenticate = True
-            fnc = authorization(fnc, authorize)
+            _authenticate = _authenticate or True
+            fnc = authorization(fnc, processor=authorize)
 
         if _authenticate:
-            fnc = authentication(fnc)
+            fnc = authentication(fnc, _authenticate)
 
 
         fnc = json_response_wrapper(fnc)

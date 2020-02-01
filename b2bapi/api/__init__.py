@@ -19,6 +19,7 @@ from . import billing
 from .public import (
     products as public_product, 
     root as public_root,
-    #inquiries as public_inquiries,
-    quotations as public_quotations,
+    inquiries as public_inquiries,
+    #quotations as public_quotations,
+    domains as public_domains,
 )

@@ -1,35 +1,32 @@
+import jwt
 import secrets
-from flask import g, abort, current_app as app, jsonify, url_for
+from flask import g, abort, current_app as app, jsonify, url_for, request
 import stripe
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from urllib import parse
 
 from b2bapi.db.models.accounts import (
     Account, AccountEmail, AccountAccessKey, Signin) #, Profile)
+from b2bapi.db.models.domains import Domain
 from b2bapi.db import db
-from .domains import _get_domain_resource
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.utils.randomstr import randomstr
 from .validation import accounts as val
-from ._route import route, hal, json_abort
+from ._route import (
+    route, hal, json_abort, domain_owner_authorization as domain_owner_authz,
+    account_owner_authorization as account_owner_authz,
+    api_url,
+)
 from .utils import localize_data, delocalize_data
 
 from b2bapi.utils.gauth import GAuth
    
 def generate_key(length=24):
     return secrets.token_urlsafe(length)
-
-
-#def create_access_key(account_id, reset=False):
-#    db.session.execute(
-#        'delete from account_access_keys where account_id=:account_id',
-#        {'account_id': account_id})
-#    return AccountAccessKey(key=generate_key(24), account_id=account_id)
-#
 
 """
 - an access key can only be created by providing an authentication token.
@@ -38,49 +35,6 @@ where it provides a temporary token that may not be verified.
 - but that token is restricted to creating a new account.
 - not accessing existing ones.
 """
-#@route('/access-key', methods=['PUT'], domained=False, expects_data=True)
-#def put_access_key(data):
-#    token_data = _verify_auth_token(data)
-#    if not token_data:
-#        return {'error': 'Invalid token'}, 400, []
-#
-#    # only authenticate verified emails.
-#    #if not token_data.get('email_verified', False):
-#    #    return {'error': 'Email not verified'}, 400, []
-#
-#    # use a login email account (login=True)
-#    email = AccountEmail.query.filter_by(
-#        email=token_data.get('email'), login=True).first()
-#
-#    if not email:
-#        rv = hal()
-#        rv._l('access_key', url_for('api.post_access_key'))
-#        rv._l('accounts', url_for('api.post_account'))
-#        rv._k('error', 'Account not found')
-#        return rv, 404, []
-#
-#    # if we got here it means we have indeed verified the token's email
-#    # let's update our account's email 
-#    email.verified = True
-#    email.account.confirmed = True
-#
-#    try:
-#        email.account.access_key = create_access_key(email.account.account_id)
-#    except sql_exc.IntegrityError as e:
-#        db.session.rollback()
-#        return {
-#            'error': 'Could not create key. Try again later.'
-#        }, 409, []
-#
-#    db.session.flush()
-#    access_key = email.account.access_key
-#
-#    rv = hal()
-#    rv._l('access_key', url_for('api.post_access_key'))
-#    rv._l('account', url_for('api.get_account', account_id=email.account_id))
-#    rv._k('access_key', access_key.key)
-#    return rv, 200, []
-
 
 def _verify_password_token(data):
     #try:
@@ -97,8 +51,12 @@ def _verify_password_token(data):
         return {'email': data['email']}
 
 
-@route('/access-token', methods=['POST'], domained=False, expects_data=True,)
-def post_access_token(data):
+@route('/id-token', methods=['POST'], domained=False, expects_data=True)
+def post_id_token(data):
+    """
+    ID Token is the token provided during registration by either the OAuth
+    authority or by Productlist (for email auth, or password auth).
+    """
     token_data = _verify_auth_token(data)
     if not token_data:
         json_abort(401, {'error': 'Not authorized'})
@@ -108,45 +66,99 @@ def post_access_token(data):
 
     if not email:
         json_abort(401, {'error': 'Not authorized'})
+    account = email.account
 
     # if we got here it means we have indeed verified the token's email
     # let's update our account's email 
     email.verified = True
-    email.account.confirmed = True
+    account.confirmed = True
+    if not account.id_token:
+        account.id_token = generate_key(24)
     db.session.flush()
 
-    access_key = AccountAccessKey(
-        key=generate_key(24), account_id=email.account_id)
-
-    db.session.add(access_key)
-    db.session.flush()
 
     rv = hal()
-    rv._l('self', url_for('api.post_access_token'))
-    rv._l('productlist:account', url_for(
-          'api.get_account', account_id=access_key.account_id))
-    rv._k('access_token', access_key.key)
-    # when setting cookie access token
-    # g.access_key = access_key.key
+    rv._l('self', api_url('api.post_id_token'))
+    rv._l('productlist:account', api_url(
+        'api.get_account', account_id=account.account_id))
+    rv._k('token', account.id_token)
+    return rv.document, 200, []
+
+
+def generate_token(payload):
+    signature = app.config['SECRET_KEY']
+    algorithm = 'HS256'
+    exp = 3600 # in seconds
+    payload.setdefault('exp', datetime.utcnow() + timedelta(seconds=exp))
+    jwt_token = jwt.encode(payload, signature, algorithm).decode('utf-8')
+    return jwt_token
+
+def id_token_authentication(**kw):
+    scheme, credentials = request.headers['authorization'].split(' ')
+    if scheme.lower()!='bearer':
+        return False
+    try:
+        g.current_account = Account.query.filter_by(id_token=credentials).one()
+        return True
+    except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
+        return False
+
+#TODO: id_token_authentication sets g.current_account to an object, whereas  
+# access_token_authentication sets it to a dict. Some consistency would be
+# better.
+@route('/access-token', methods=['POST'], domained=False, expects_data=True,
+       authenticate=id_token_authentication, expects_account=True)
+def post_access_token(data, account):
+    # default role for account is admin
+    role = 'admin'
+    # is user making claim on a domain
+    domain_name = data.get('domain')
+    if domain_name:
+        try:
+            domain = Domain.query.filter_by(name=domain_name).one()
+        except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
+            json_abort(404, {'error': 'Domain not found'})
+
+        try:
+            from .domains import _get_domain_account
+            domain_account = _get_domain_account(
+                domain_id=domain.domain_id, account_id=account.account_id)
+            if domain_account.active:
+                role = domain_account.role or 'user'
+        except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
+            pass
+
+    payload = {
+        'account_id': clean_uuid(account.account_id),
+        'account_url': api_url(
+            'api.get_account', account_id=clean_uuid(account.account_id)),
+        'email': account.email,
+        'role': role,
+        'domain': domain_name,
+    }
+    token = generate_token(payload)
+    rv = hal()
+    rv._l('self', api_url('api.post_access_token'))
+    rv._k('token', token)
     return rv.document, 200, []
 
 
 @route('/profile', methods=['GET'], domained=False, authenticate=True, 
-       expects_account=True)
-def get_profile(account):
+       expects_access_token=True)
+def get_profile(access_token):
     """
     The difference between this resource and `account` is that this
     one returns the authenticated user's profile, whereas `account` returns
-    the matched the account info that matches the url's `account_id`. 
+    the account info that matches the url's `account_id`. 
     That means that this resource can effectively only be retrieved by the
     account's owner and its full url can be published as part of the `Root`
     resource.
     """
     rv = hal()
-    rv._l('self', url_for('api.get_profile'))
-    rv._l('productlist:account', url_for(
-        'api.get_account', account_id=account.account_id))
-    rv._k('account_id', account.account_id)
+    rv._l('self', api_url('api.get_profile'))
+    rv._l('productlist:account', api_url(
+        'api.get_account', account_id=access_token['account_id']))
+    rv._k('account_id', access_token['account_id'])
     return rv.document, 200, []
 
 
@@ -188,14 +200,14 @@ def post_account(data):
         json_abort(400, {'error': 'Invalid token'})
 
     try:
-        # create account, account_email and access_key
+        # create account, account_email and id_token
         account = create_account_from_token(token_data)
     except sql_exc.IntegrityError as e:
         json_abort(409, {'error': 'Account already exists'})
 
     rv = hal()
-    rv._l('location', url_for('api.get_account', account_id=account.account_id))
-    rv._l('productlist:access_token', url_for('api.post_access_token'))
+    rv._l('location', api_url('api.get_account', account_id=account.account_id))
+    rv._l('productlist:access_token', api_url('api.post_access_token'))
     return rv.document, 201, []
 
 
@@ -275,7 +287,14 @@ def create_account_from_token(data):
     
     account = Account(**data)
 
-    #account.password = data['password']
+    while True:
+        id_token = generate_key(24)
+        exists = Account.query.filter_by(id_token=id_token).first()
+        if exists:
+            # that id_token exists, get another one
+            continue
+        account.id_token = id_token
+        break
 
     email = AccountEmail(**{
         'email': account.email,
@@ -286,11 +305,6 @@ def create_account_from_token(data):
         'login': True, 
     })
 
-    #access_key = AccountAccessKey(**{
-    #    'key': generate_key(24),
-    #})
-
-    #account.access_key = access_key
     email.account = account
 
     try:
@@ -353,12 +367,14 @@ def _get_account(account_id):
         return Account.query.filter_by(account_id=account_id).one()
     except orm_exc.NoResultFound as e:
         json_abort(404, {'error': 'Account not found'})
+    except orm_exc.MultipleResultsFound as e:
+        json_abort(404, {'error': 'Ambiguous results.'})
 
 
-@route('/accounts/<account_id>', domained=False, authenticate=True,
+@route('/accounts/<account_id>', domained=False, authorize=account_owner_authz,
        expects_lang=True)
 def get_account(account_id, lang):
-    self = url_for('api.get_account', account_id=account_id)
+    self = api_url('api.get_account', account_id=account_id)
     a = _get_account(account_id)
     return _get_account_resource(a, lang=lang), 200, []
 
@@ -366,11 +382,11 @@ def get_account(account_id, lang):
 def _get_account_resource(account, lang, partial=False):
     a = account
     rv = hal()
-    rv._l('self', url_for('api.get_account', account_id=account.account_id))
-    rv._l('domains', url_for('api.get_domains'))
-    rv._l('payment_sources', url_for('api.post_payment_source'))
+    rv._l('self', api_url('api.get_account', account_id=account.account_id))
+    rv._l('domains', api_url('api.get_domains'))
+    rv._l('payment_sources', api_url('api.post_payment_source'))
 
-    rv._l('payment_source', url_for(
+    rv._l('payment_source', api_url(
         'api.delete_payment_source', source_id='{source_id}'), templated=True,
         unquote=True)
     # TODO maybe namespace domains url with acccount_id
@@ -379,11 +395,11 @@ def _get_account_resource(account, lang, partial=False):
     rv._k('first_name', account.first_name)
     rv._k('last_name', account.last_name)
 
-    domains = [_get_domain_resource(domain.domain, partial=True) 
+    from .domains import _get_domain_resource
+    domains = [_get_domain_resource(domain.domain, lang,) 
                for domain in account.domains]
     rv._k('roles', {d.domain.name:d.role for d in account.domains})
-    rv._embed('domains', [_get_domain_resource(domain.domain, partial=True)
-                          for domain in account.domains])
+    rv._embed('domains', domains)
 
     rv._k('data', delocalize_data(
         account.data, Account.localized_fields, lang))
@@ -395,7 +411,7 @@ def _get_account_resource(account, lang, partial=False):
     return rv.document
 
 @route('/accounts/<account_id>', methods=['PUT'], domained=False,
-       authenticate=True, expects_data=True, expects_lang=True)
+       authorize=account_owner_authz, expects_data=True, expects_lang=True)
 def put_account(account_id, data, lang):
     #TODO: data validation
     data = val.edit_account.validate(data)

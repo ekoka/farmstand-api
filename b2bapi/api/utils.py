@@ -66,7 +66,7 @@ from copy import deepcopy
 from b2bapi.db.models.meta import Field
 from b2bapi.db import db
 import stripe
-from ._route import route, url_for, json_abort, hal
+from ._route import route, json_abort, hal
 
 def _localized_field(field, lang):
     rv = dict(**field)

@@ -10,22 +10,27 @@ from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from b2bapi.db.models.groups import (
     Group, GroupOption, ProductGroupOption)
-from ._route import route, hal, json_abort
+from ._route import (
+    route, hal, json_abort, domain_owner_authorization as domain_owner_authz,
+    api_url,
+)
 from .product_utils import _localize_data, _merge_localized_data, _delocalize_data
+from .accounts import _get_account
 
-@route('/groups', expects_domain=True, expects_lang=True, authenticate=True)
+@route('/groups', expects_domain=True, expects_lang=True,
+       authorize=domain_owner_authz)
 def get_groups(lang, domain):
     groups = Group.query.filter_by(domain_id=domain.domain_id).all()
     rv = hal()
-    rv._l('self', url_for('api.get_groups'))
-    rv._l('productlist:group', url_for('api.get_group', group_id='{group_id}'),
+    rv._l('self', api_url('api.get_groups'))
+    rv._l('productlist:group', api_url('api.get_group', group_id='{group_id}'),
                             templated=True, unquote=True)
-    rv._l('productlist:group_resources', url_for('api.get_group_resources'))
+    rv._l('productlist:group_resources', api_url('api.get_group_resources'))
     rv._k('group_ids', [g.group_id for g in groups])
     return rv.document, 200, []
 
-@route('/group-resources', expects_domain=True, expects_params=True, 
-       expects_lang=True, authenticate=True)
+@route('/group-resources', expects_domain=True, expects_params=True,
+       expects_lang=True, authorize=domain_owner_authz)
 def get_group_resources(params, domain, lang):
     group_ids = params.getlist('fid')
     q = Group.query.filter_by(domain_id=domain.domain_id)
@@ -34,15 +39,14 @@ def get_group_resources(params, domain, lang):
         q = q.filter(Group.group_id.in_(group_ids))
     groups = q.all()
     rv = hal()
-    rv._l('self', url_for('api.get_group_resources'))
+    rv._l('self', api_url('api.get_group_resources'))
     rv._k('group_ids', [g.group_id for g in groups])
     rv._embed('groups', [_group_resource(g, lang) for g in groups])
     return rv.document, 200, []
 
-
 # TODO: review
 @route('/groups', methods=['POST'], expects_domain=True, expects_data=True,
-       expects_lang=True, authenticate=True)
+       expects_lang=True, authorize=domain_owner_authz)
 def post_group(data, lang, domain):
     #TODO: validate
     # data = val.new_group.validate(data)
@@ -63,7 +67,7 @@ def post_group(data, lang, domain):
     if data.get('options'):
         _sync_options(g, data['options'], lang, domain.domain_id)
     rv = hal()
-    location = url_for('api.get_group', group_id=g.group_id)
+    location = api_url('api.get_group', group_id=g.group_id)
     rv._l('location', location)
     rv._k('group_id', g.group_id)
     return rv.document, 201, [('Location', location)]
@@ -131,7 +135,7 @@ def _sync_options(g, options, lang, domain_id):
                 json_abort(400, {'error': 'Bad format'})
 
 @route('/groups/<group_id>', methods=['PUT'], expects_data=True, 
-       expects_lang=True, expects_domain=True, authenticate=True)
+       expects_lang=True, expects_domain=True, authorize=domain_owner_authz)
 def put_group(group_id, data, lang, domain):
     #TODO: validate
     # data = val.edit_group.validate(data)
@@ -159,9 +163,9 @@ def _get_group(group_id, domain_id):
 
 def _group_resource(g, lang,):
     rv = hal()
-    rv._l('self', url_for('api.get_group', group_id=g.group_id))
-    rv._l('options', url_for('api.post_group_option', group_id=g.group_id))
-    rv._l('option', url_for('api.get_group_option', group_id=g.group_id,
+    rv._l('self', api_url('api.get_group', group_id=g.group_id))
+    rv._l('options', api_url('api.post_group_option', group_id=g.group_id))
+    rv._l('option', api_url('api.get_group_option', group_id=g.group_id,
                             group_option_id='{group_option_id}'),
                             templated=True, unquote=True)
     rv._k('group_id', g.group_id)
@@ -174,14 +178,14 @@ def _group_resource(g, lang,):
     return rv.document
 
 @route('/groups/<group_id>', expects_domain=True, expects_lang=True,
-       authenticate=True)
+       authorize=domain_owner_authz)
 def get_group(group_id, lang, domain):
     g = _get_group(group_id, domain.domain_id)
     rv = _group_resource(g, lang)
     return rv, 200, []
 
 @route('/groups/<group_id>', methods=['DELETE'], expects_domain=True,
-       authenticate=True)
+       authorize=domain_owner_authz)
 def delete_group(group_id, domain):
     try:
         db.session.execute(
@@ -195,24 +199,23 @@ def delete_group(group_id, domain):
         db.session.rollback()
     return {}, 200, []
 
-
 def _group_option_resource(group_option, lang):
     f_o = group_option
     rv = hal()
-    rv._l('self', url_for('api.get_group_option', group_id=f_o.group_id,
+    rv._l('self', api_url('api.get_group_option', group_id=f_o.group_id,
                           group_option_id=f_o.group_option_id))
-    rv._l('products', url_for(
+    rv._l('products', api_url(
         'api.put_group_option_products', group_id=f_o.group_id,
         group_option_id=f_o.group_option_id))
     #if not partial:
-    #    rv._l('group', url_for('api.get_group', group_id=f_o.group_id))
+    #    rv._l('group', api_url('api.get_group', group_id=f_o.group_id))
     rv._k('group_option_id', f_o.group_option_id)
     rv._k('data', _delocalize_data(f_o.data, ['label'], lang))
     rv._k('products', [p.product_id for p in group_option.products])
     return rv.document
 
 @route('/groups/<group_id>/options', methods=['POST'], expects_lang=True,
-       expects_domain=True, expects_data=True, authenticate=True)
+       expects_domain=True, expects_data=True, authorize=domain_owner_authz)
 def post_group_option(group_id, data, lang, domain):
     # TODO: validation
     # data = val.new_group_option(data)
@@ -225,7 +228,7 @@ def post_group_option(group_id, data, lang, domain):
         db.session.rollback()
         json_abort(400, {'error': 'Bad format'})
     rv = hal()
-    location = url_for('api.get_group_option', group_id=group_id, 
+    location = api_url('api.get_group_option', group_id=group_id, 
                        group_option_id=f_o.group_option_id)
     rv._l('location', location)
 
@@ -240,15 +243,15 @@ def _get_group_option(group_id, group_option_id, domain_id):
     except:
         json_abort(404, {'error': 'Group option not found'})
 
-@route('/groups/<group_id>/options/<group_option_id>', authenticate=True,
-       expects_domain=True, expects_lang=True)
+@route('/groups/<group_id>/options/<group_option_id>', expects_domain=True,
+       authorize=domain_owner_authz, expects_lang=True)
 def get_group_option(group_id, group_option_id, lang, domain):
     f_o = _get_group_option(group_id, group_option_id, domain.domain_id)
     rv = _group_option_resource(f_o, lang)
     return rv, 200, []
 
-@route('/groups/<group_id>/options/<group_option_id>', authenticate=True,
-       expects_domain=True, expects_lang=True, expects_data=True)
+@route('/groups/<group_id>/options/<group_option_id>', expects_domain=True,
+       expects_lang=True, expects_data=True, authorize=domain_owner_authz)
 def put_group_option(group_id, group_option_id, data, lang, domain):
     # TODO: validate
     # data = val.group_option.validate(data)
@@ -260,8 +263,8 @@ def put_group_option(group_id, group_option_id, data, lang, domain):
         json_abort(400, {'error': 'Bad format'})
     return {}, 200, []
 
-@route('/groups/<group_id>/options/<group_option_id>', authenticate=True,
-       expects_domain=True)
+@route('/groups/<group_id>/options/<group_option_id>', expects_domain=True,
+       authorize=domain_owner_authz)
 def delete_group_option(group_id, group_option_id, domain):
     try:
         db.session.execute(
@@ -279,7 +282,7 @@ def delete_group_option(group_id, group_option_id, domain):
 
 @route('/groups/<group_id>/options/<group_option_id>/products',
        methods=['PUT'], expects_domain=True, expects_data=True,
-       authenticate=True)
+       authorize=domain_owner_authz)
 def put_group_option_products(group_id, group_option_id, domain, data):
     f_o = _get_group_option(group_id, group_option_id, domain.domain_id)
     try:

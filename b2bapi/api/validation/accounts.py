@@ -85,8 +85,8 @@ edit_account = obj(
     prim(vld.optional, vld.allowempty).apply_to('last_name'),
     obj(~vld.required, vld.rejectnull(failsafe=remove), vld.allowempty,
         prim(~vld.required, vld.allowempty).apply_to(
-            'phone', 'fax', 'company', 'role', 'website', 'summary', 'address',
-            'city', 'state_province', 'country', 'zip_postal_code', 
+            'phone', 'organization', 'role', 'website', 'bio', 'public_name',
+            'location', 'linkedin', 'facebook', 'skype', 'whatsapp',
         ), 
         remove_extra_props,
     ).apply_to('data'),
