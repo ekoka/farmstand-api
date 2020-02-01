@@ -51,42 +51,11 @@ def _verify_password_token(data):
         return {'email': data['email']}
 
 
-#@route('/access-token', methods=['POST'], domained=False, expects_data=True,)
-#def post_access_token(data):
-#    token_data = _verify_auth_token(data)
-#    if not token_data:
-#        json_abort(401, {'error': 'Not authorized'})
-#
-#    email = AccountEmail.query.filter_by(
-#        email=token_data.get('email'), login=True).first()
-#
-#    if not email:
-#        json_abort(401, {'error': 'Not authorized'})
-#
-#    # if we got here it means we have indeed verified the token's email
-#    # let's update our account's email 
-#    email.verified = True
-#    email.account.confirmed = True
-#    db.session.flush()
-#
-#    access_key = AccountAccessKey(
-#        key=generate_key(24), account_id=email.account_id)
-#
-#    db.session.add(access_key)
-#    db.session.flush()
-#
-#    rv = hal()
-#    rv._l('self', url_for('api.post_access_token'))
-#    rv._l('productlist:account', url_for(
-#          'api.get_account', account_id=access_key.account_id))
-#    rv._k('access_token', access_key.key)
-#    # when setting cookie access token
-#    # g.access_key = access_key.key
-#    return rv.document, 200, []
-
-
 @route('/id-token', methods=['POST'], domained=False, expects_data=True)
 def post_id_token(data):
+    """
+    the ID Token is in fact the Refresh token.
+    """
     token_data = _verify_auth_token(data)
     if not token_data:
         json_abort(401, {'error': 'Not authorized'})
@@ -320,7 +289,9 @@ def create_account_from_token(data):
     while True:
         id_token = generate_key(24)
         exists = Account.query.filter_by(id_token=id_token).first()
-        if exists: continue
+        if exists:
+            # that id_token exists, get another one
+            continue
         account.id_token = id_token
         break
 

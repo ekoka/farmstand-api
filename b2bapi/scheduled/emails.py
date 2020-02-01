@@ -112,16 +112,16 @@ def get_field(record, name, lang):
 #        activation_url = dramatiq.flask_app.config['ACTIVATION_URL']
 #        activation_url = activation_url.format(token=token['token'], lang=lang)
 #        content = (f"Your e-mail address was recently used to sign-up to "
-#                   f"SimpleB2B.app. Click here to activate your account "
+#                   f"Productlist.io. Click here to activate your account "
 #                   f"{activation_url}")
 #
-#        content = (f"You've recently signed up to a new service with SimpleB2B."
+#        content = (f"You've recently signed up to a new service with Productlist."
 #                   f" Click the following link to activate your account "
 #                   f"{activation_url}")
 #        to = s.email
 #
 #        try:
-#            send(subject='SimpleB2B Account Activation', 
+#            send(subject='Productlist Account Activation', 
 #                 content=content, to=to)
 #            # activate token
 #            #s.meta['tokens'][i]['status'] = 'active'
