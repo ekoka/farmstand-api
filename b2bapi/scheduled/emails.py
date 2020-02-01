@@ -2,7 +2,8 @@ import dramatiq
 from datetime import datetime
 from b2bapi.db.models.accounts import Signin
 from b2bapi.db import db
-from b2bapi.utils.mailer import Gmail as Mailer
+#from b2bapi.utils.mailer import Gmail as Mailer
+from b2bapi.utils.mailer import Zoho as Mailer
 from b2bapi.utils.uuid import clean_uuid
 
 def send(subject, content, to):
