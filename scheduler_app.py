@@ -1,4 +1,4 @@
-from b2bapi.config import config
+from b2bapi import settings as config
 from b2bapi import make_app
 from b2bapi.scheduled import Cron
 from b2bapi.scheduled import emails
