@@ -36,6 +36,8 @@ PROJECT_NAME = 'productlist'
 SETTINGS_PATH = os.path.realpath(__file__)
 APP_PATH = os.path.dirname(SETTINGS_PATH)
 PROJECT_PATH = os.path.dirname(APP_PATH)
+DATA_FILES = os.path.join(PROJECT_PATH, 'data')
+
 
 # logging
 LOGGING_PATH = os.path.join(PROJECT_PATH, config.LOGGING_PATH)
@@ -91,6 +93,8 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 SQLALCHEMY_COMMIT_ON_TEARDOWN = True
 # SQL ALCHEMY PROFILER
 ENABLE_SQL_PROFILE_LOG = False
+COMMON_WORDS_FILE = os.path.join(DATA_FILES, 'common_words.json')
+RESERVED_WORDS_FILE = os.path.join(DATA_FILES, 'reserved_words.json')
 
 # Flask development server's config
 HOST = config.HOST
@@ -113,12 +117,13 @@ APP_INIT_CALLBACKS = {
         ('create_db', config.CALLBACKS.get('created_db', True)),
         ('sync_stripe_plans', config.CALLBACKS.get(
             'sync_stripe_plans', False)),
+        ('sync_common_words', config.CALLBACKS.get(
+            'sync_common_words', False)),
         ('sync_reserved_words', config.CALLBACKS.get(
             'sync_reserved_words', False)),
     ]
 }
 
-UPDATE_FROM_STRIPE = config.UPDATE_FROM_STRIPE
 #if DEMO:
 #    assert secrets.DB_NAME.startswith('demo_') or secrets.DB_NAME.endswith('_demo')
 #

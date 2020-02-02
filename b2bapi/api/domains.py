@@ -14,7 +14,7 @@ from ._route import (
     domain_owner_authorization as domain_owner_authz,
     account_owner_authorization as account_owner_authz,
 )
-from b2bapi.db.models.reserved_names import reserved_names
+from b2bapi.db.models.reserved_words import reserved_words
 from .utils import localize_data, delocalize_data, StripeContext
 from .accounts import _get_account
 
@@ -260,7 +260,7 @@ def put_domain(domain_name, data, lang):
 @route('/domain-name-check', domained=False, expects_params=True)
 def get_domain_name_check(params):
     name = params.get('q')
-    if name in reserved_names:
+    if name in reserved_words:
         return {}, 403, []
     try:
         domain = Domain.query.filter(Domain.name==name).one()

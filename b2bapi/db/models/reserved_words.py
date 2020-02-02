@@ -1,4 +1,4 @@
-reserved_names = [
+reserved_words = [
     "0",
     "about",
     "access",

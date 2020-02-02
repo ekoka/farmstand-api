@@ -4,7 +4,7 @@ from vino.processors import validating as vld
 from vino import errors as vno_err
 from sqlalchemy.orm import exc as orm_exc
 
-from b2bapi.db.models.security import Word
+from b2bapi.db.models.security import CommonWord as Word
 
 
 def max_size(size):

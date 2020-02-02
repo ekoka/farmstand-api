@@ -12,7 +12,6 @@ from b2bapi.db.models.accounts import PaymentSource
 from b2bapi.db import db
 from b2bapi.utils.uuid import clean_uuid
 from ._route import route, api_url, json_abort, hal
-from b2bapi.db.models.reserved_names import reserved_names
 from .utils import localize_data, delocalize_data, StripeContext
 
 from .accounts import _get_account
