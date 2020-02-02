@@ -17,7 +17,8 @@ ALLOWED_ORIGINS_REGEX = config.ALLOWED_ORIGINS_REGEX
 # ------------------------- #
 # I18N and L10N
 
-stripe.api_key = secrets.STRIPE_DEV_KEY
+stripe.api_key = secrets.STRIPE_KEY
+UPDATE_FROM_STRIPE = config.UPDATE_FROM_STRIPE
 
 LOCALES = config.LOCALES
 LOCALE = config.LOCALE

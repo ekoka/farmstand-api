@@ -6,19 +6,22 @@ from werkzeug import ImmutableDict, exceptions as exc
 from flask import (
     Flask, request, g, session, current_app, logging as flask_logging,
     ctx)
+from flask.signals import Namespace 
 import dramatiq
 from flask_sqlalchemy import SQLAlchemy
 from flask_babelex import Babel
 
 from .api import bp as api_blueprint
 from .utils.gmail import Gmail
-
 from .db import db
+
+signals = Namespace()
 
 def make_app(config_obj=None):
     # Let's make sure to override the static_folder default value ('static'),
     # to avoid conflicts with blueprints that might also use 'static' as
     # a static folder. We might wanna do the same for templates.
+    app_created = signals.signal('app-created')
 
     app = Flask(
         import_name=__name__, static_folder='../static', 
@@ -26,6 +29,7 @@ def make_app(config_obj=None):
     app.config.from_object(config_obj)
 
     dramatiq.flask_app = app
+
 
     # Babel: i10n & i18n
     babel = Babel(app)
@@ -45,8 +49,11 @@ def make_app(config_obj=None):
     db.app = app
     if app.config.get('FORCE_DROP_DB_SCHEMA'):
         db.drop_all()
-    with app.app_context():
-        db.create_all()
+    if app.config['DEMO']:
+        from .db.init import create_db, sync_stripe_plans
+        app_created.connect(create_db)
+        app_created.connect(sync_stripe_plans)
+
 
     #app.mailer = Gmail(app.config['GMAIL_LOGIN'], app.config['GMAIL_PASSWORD'])
 
@@ -86,6 +93,8 @@ def make_app(config_obj=None):
 
     enable_file_logging(app)
 
+    # broadcast app creation
+    app_created.send(app)
     return app
 
 def enable_file_logging(app):
