@@ -14,7 +14,7 @@ env = Environment(
 def send(subject, to, content=None, html_content=None):
     #TODO: make a single reusable instance of mailer
     config = dramatiq.flask_app.config
-    Mailer = config.MAILER
+    Mailer = config['MAILER']
     login = config['MAIL_LOGIN']
     password = config['MAIL_PASSWORD']
     m = Mailer(login, password, subject=subject, to=to, 
