@@ -23,13 +23,12 @@ def send(subject, to, content=None, html_content=None):
 
 @dramatiq.actor(actor_name='productlist.send_passcode')
 def send_passcode():
-    app = dramatiq.flask_app
+    config = dramatiq.flask_app.config
     signins = Signin.query.filter_by(sent=False).all()
     for s in signins:
         s.passcode_timestamp = datetime.utcnow()
         lang = 'en'
-        url_type = 'PASSCODE_SIGNIN_URL'
-        url_template = dramatiq.flask_app.config[url_type]
+        url_template = config['PASSCODE_SIGNIN_URL']
         url = url_template.format(
             passcode=s.passcode, lang=lang, signin_id=clean_uuid(s.signin_id))
         content = f"One-time access code: {url}"

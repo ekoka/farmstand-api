@@ -371,6 +371,7 @@ reserved_names = [
     "pop",
     "pop3",
     "popular",
+    "porn",
     "portal",
     "post",
     "postfix",

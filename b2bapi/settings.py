@@ -18,7 +18,6 @@ ALLOWED_ORIGINS_REGEX = config.ALLOWED_ORIGINS_REGEX
 # I18N and L10N
 
 stripe.api_key = secrets.STRIPE_KEY
-UPDATE_FROM_STRIPE = config.UPDATE_FROM_STRIPE
 
 LOCALES = config.LOCALES
 LOCALE = config.LOCALE
@@ -75,7 +74,7 @@ MAIL_LOGIN = secrets.MAIL_LOGIN
 MAIL_PASSWORD = secrets.MAIL_PASSWORD
 
 PASSCODE_SIGNIN_URL = config.PASSCODE_SIGNIN_URL
-ACCOUNT_CONFIRMATION_URL = config.ACCOUNT_CONFIRMATION_URL
+#ACCOUNT_CONFIRMATION_URL = config.ACCOUNT_CONFIRMATION_URL
 
 connect_string = "{dialect}://{user}:{password}@{host}/{dbname}".format(
     dialect=secrets.DB_DIALECT, user=secrets.DB_USER, 
@@ -109,6 +108,17 @@ DEBUG = config.DEBUG
 TESTING = config.TESTING
 DEMO = config.DEMO
 
+APP_INIT_CALLBACKS = {
+    'DB': [
+        ('create_db', config.CALLBACKS.get('created_db', True)),
+        ('sync_stripe_plans', config.CALLBACKS.get(
+            'sync_stripe_plans', False)),
+        ('sync_reserved_words', config.CALLBACKS.get(
+            'sync_reserved_words', False)),
+    ]
+}
+
+UPDATE_FROM_STRIPE = config.UPDATE_FROM_STRIPE
 #if DEMO:
 #    assert secrets.DB_NAME.startswith('demo_') or secrets.DB_NAME.endswith('_demo')
 #

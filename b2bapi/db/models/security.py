@@ -1,7 +1,7 @@
 from . import db
 
 class Word(db.Model):
-    __tablename__ = 'common_words'
+    __tablename__ = 'reserved_words'
 
     word_id = db.Column(db.Integer, primary_key=True)
     word = db.Column(db.Unicode, unique=True, nullable=False)
