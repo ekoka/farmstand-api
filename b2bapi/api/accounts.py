@@ -59,13 +59,13 @@ def post_id_token(data):
     """
     token_data = _verify_auth_token(data)
     if not token_data:
-        json_abort(401, {'error': 'Not authorized'})
+        json_abort(401, {'error': 'Not authorized (wrong token)'})
 
     email = AccountEmail.query.filter_by(
         email=token_data.get('email'), login=True).first()
 
     if not email:
-        json_abort(401, {'error': 'Not authorized'})
+        json_abort(401, {'error': 'Not authorized (no email)'})
     account = email.account
 
     # if we got here it means we have indeed verified the token's email
@@ -180,6 +180,7 @@ in any case an account is only created if the email does not exist
 """
 @route('/accounts', methods=['POST'], domained=False, expects_data=True)
 def post_account(data):
+    token_data = None
     try:
         provider, token = data['provider'], data['token']
         if provider.lower()=='google':
@@ -191,10 +192,9 @@ def post_account(data):
             # validate + normalize
             token_data = val.new_account_via_email.validate(token)
             #token_data = _get_email_registration_data(token)
-        else:
-            token_data = None
     except:
-        token_data = None
+        raise
+        
 
     if not token_data:
         json_abort(400, {'error': 'Invalid token'})
@@ -273,7 +273,7 @@ def _verify_auth_token(data):
         except KeyError:
             return _verify_email_token(token)
 
-    json_abort(401, {'error': 'Not authorized'})
+    json_abort(401, {'error': 'Not authorized (invalid token)'})
 
 
 def create_account_from_token(data):
