@@ -7,6 +7,16 @@ from sqlalchemy.orm import exc as orm_exc
 from b2bapi.db.models.security import CommonWord as Word
 
 
+def dictionary_match(data, state):
+    try: 
+        q = Word.query.filter_by(word=data)
+        q.one()
+    except orm_exc.NoResultFound as e: 
+        # we didn't find it in the dict, it may be secure
+        return data
+    raise vno_err.ValidationError('Password is too common.')
+
+
 def max_size(size):
     def validate(data, state):
         if len(data) <= size:
@@ -30,22 +40,6 @@ def padless_size(minsize):
         if len(data.strip()) >= minsize:
             return data
         raise vno_err.ValidationError('Password is not safe.')
-    return validate
-
-
-def dictionary_match(dictionary='john'):
-    if dictionary in ['*', None]:
-        dictionary = None
-    def validate(data, state):
-        try: 
-            q = Word.query.filter_by(word=data)
-            if dictionary:
-                q = q.filter(Word.dictionary==dictionary)
-            q.one()
-        except orm_exc.NoResultFound as e: 
-            # we didn't find it in the dict, it may be secure
-            return data
-        raise vno_err.ValidationError('Password is too common.')
     return validate
 
 

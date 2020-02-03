@@ -70,7 +70,7 @@ def post_domain(data, access_token, lang):
         if data.get('data'):
             domain.data = localize_data(
                 data['data'], Domain.localized_fields, lang)
-        domain.meta = data.get('meta') or Domain.default_meta
+        domain.meta = data.get('meta') or Domain.default_meta()
         db.session.flush()
 
         # stripe's metadata

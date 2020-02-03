@@ -27,7 +27,7 @@ password_check = prim(
     pwd.max_size(200),
     pwd.min_size(8),
     pwd.padless_size(6),
-    pwd.dictionary_match(dictionary='john'), # john the ripper
+    pwd.dictionary_match, # john the ripper
     pwd.alphanum_sequence(minlength=30),
     pwd.repeated_char(minlength=50),
 )
