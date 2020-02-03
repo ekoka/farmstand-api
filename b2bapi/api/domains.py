@@ -144,8 +144,10 @@ def _subscription_data(subscription):
     return rv
 
 
+# we only need to authenticate since the domain list is matched against the 
+# authenticated account anyways
 @route('/domains', expects_access_token=True, domained=False, expects_lang=True,
-       authorize=account_owner_authz)
+       authenticate=True) #authorize=account_owner_authz)
 def get_domains(access_token, lang):
     account = _get_account(access_token['account_id'])
     rv = hal()
