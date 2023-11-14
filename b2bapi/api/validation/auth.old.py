@@ -6,11 +6,10 @@ from vino import errors as vno_err
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 
-from b2bapi.db.models.accounts import Signin
-from b2bapi.db.models.security import Word
-
 from . import check_uuid4,  set_uuid, upper, remove, set_value
-from b2bapi.utils.randomstr import randomstr
+from ...db.models.accounts import Signin
+from ...db.models.security import Word
+from ...utils.randomstr import randomstr
 
 def max_size(size):
     def validate(data, state):
@@ -39,12 +38,12 @@ def dictionary_match(dictionary='john'):
     if dictionary in ['*', None]:
         dictionary = None
     def validate(data, state):
-        try: 
+        try:
             q = Word.query.filter_by(word=data)
             if dictionary:
                 q = q.filter(Word.dictionary==dictionary)
             q.one()
-        except orm_exc.NoResultFound as e: 
+        except orm_exc.NoResultFound as e:
             # we didn't find it in the dict, it may be secure
             return data
         raise vno_err.ValidationError('Password is too common.')
@@ -63,7 +62,7 @@ def alphanum_sequence(minlength=None):
         if minlength:
             if len(data) >= minlength:
                 return data
-        # we first assume that this is a sequence 
+        # we first assume that this is a sequence
         # and we want to be proven wrong
         seq_asc = seq_desc = True
         # we'll be working with a generator of letter ordinals (integer)
@@ -74,7 +73,7 @@ def alphanum_sequence(minlength=None):
         while True:
             try:
                 # if the ascending flag is still up it means we're going up.
-                # Idem if left is less than right by 1. 
+                # Idem if left is less than right by 1.
                 if seq_asc and left==right-1:
                     # we're ascending we can't be descending.
                     seq_desc = False
@@ -92,7 +91,7 @@ def alphanum_sequence(minlength=None):
                     break
                 # when we move left becomes right and right gets the next value
                 left, right = right, next(ordgen)
-            except StopIteration: 
+            except StopIteration:
                 # end of string
                 break
 
@@ -118,7 +117,7 @@ def repeated_char(minlength=None):
             raise vno_err.ValidationError('Password is not safe.')
         return data
     return validate
-    
+
 
 password_check = prim(
     ~vld.required,
@@ -163,4 +162,3 @@ def check_email(data, state=None):
 #        .apply_to('confirmed'),
 #    obj(vld.required(default=init_meta, override=init_meta)).apply_to('meta'),
 #)
-

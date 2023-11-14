@@ -1,7 +1,7 @@
 """
 How to handle data in arrays during a merge (i.e. during atomic updates)?
 
-The following is a convention used within the ProducList's api to manage data 
+The following is a convention used within the ProducList's api to manage data
 contained in arrays in a way that facilitates atomic updates. It's not meant to
 become a standard beyond the scope of this platform.
 
@@ -10,7 +10,7 @@ become a standard beyond the scope of this platform.
     - the second (group2) can include the remaining types, namely bool, number,
     string and arrays.
 
-- Objects cannot be placed in group2 arrays and boolean, string, number, and 
+- Objects cannot be placed in group2 arrays and boolean, string, number, and
 arrays cannot go in group1.
 
 - this implies that if an array directly contains an object, it's
@@ -29,7 +29,7 @@ don't call it "name" in one instance, "id" in another, and "key" in a third).
     [{'name': 'firstname', ...}, {'name': 'lastname', ...}, ...]
 
 - the point of this key is to match the object to its stored counterpart
-during an atomic update, thus making it possible to only upload the relevant 
+during an atomic update, thus making it possible to only upload the relevant
 information without padding the array with placeholders.
 
 - Note that during an atomic update of group1 objects, their order in the
@@ -39,35 +39,32 @@ array has no meaning. They are matched and updated based on their key.
 update as a whole.
 
 - It should be noted that if a group1 array happens to have a group2 ancestor
-it cannot be updated atomically: 
+it cannot be updated atomically:
 
-    e.g. 
+    e.g.
     group2[                             can hold (array, bool, number, string)
         group2[                         can hold (array, bool, numer, string)
             group1[{...}, ...],         can hold (object)
-            group1[{...}, ...],                          
-            group1[{...}, ...],                          
-        ], 
-        bool,               
-        group2                 
+            group1[{...}, ...],
+            group1[{...}, ...],
+        ],
+        bool,
+        group2
         ...
     ]
 
-This is because, since the ancestor group2 is assigned as a chunk, it thus 
+This is because, since the ancestor group2 is assigned as a chunk, it thus
 becomes impossible to accurately determine the descendant groups' targets.
 
 A side effect of this limitation is that in this situation it is possible to
-have mixed types in descendant group as the parser never gets a chance to 
+have mixed types in descendant group as the parser never gets a chance to
 validate them.
 
 My advice is to keep things as flat and simple as reasonably possible.
 """
 from copy import deepcopy
 
-from b2bapi.db.models.meta import Field
-
-
-class Mismatch(Exception): 
+class Mismatch(Exception):
     pass
 
 def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
@@ -98,7 +95,7 @@ def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
     try:
         if ordered_dict:
             try:
-                return [index for index,l in enumerate(leaf) 
+                return [index for index,l in enumerate(leaf)
                         if l.get('name')==key][0]
             except IndexError:
                 raise KeyError
@@ -108,13 +105,13 @@ def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
     except TypeError:
         # the type of the field is not consistent with the key
         raise Mismatch('Invalid key')
-    except KeyError: 
+    except KeyError:
         # the key doesn't exist (yet) in the structure, but usage is
         # consistent with the object's type.
         if not strict_keys:
-            # non-existing keys are allowed. 
+            # non-existing keys are allowed.
             # return None to signal that it's the case here.
-            return 
+            return
 
         # in case only existing keys and indices are allowed
         raise Mismatch('Non-existing key')
@@ -172,7 +169,7 @@ def patch_record(record, data, keymap=None):
             # since it went through, assume data is a dict.
             # verify that key is valid on existing record.
             # validatekey will raise an error on an invalid key (e.g. key does
-            # not exist as a base field on the record) 
+            # not exist as a base field on the record)
             valid = validatekey(
                 record, k, validkeys=keymap, strict_keys=not_strict)
 
@@ -187,7 +184,7 @@ def patch_record(record, data, keymap=None):
 
             # the key exists in the record
             keymap.append(k)
-            # recursively try to assign the value to it 
+            # recursively try to assign the value to it
             patch_record(record, v, keymap)
             # the value has now been assigned, pop the key
             keymap.pop(-1)
@@ -209,7 +206,7 @@ def patch_record(record, data, keymap=None):
                 except KeyError:
                     # dict's key access method was recognized, but the key was
                     # not found.
-                    # raise because it violates the convention that any dict 
+                    # raise because it violates the convention that any dict
                     # in a list must have an identifying key (defaults to
                     # 'name').
                     raise Mismatch('Missing identifier key in object')
@@ -217,7 +214,7 @@ def patch_record(record, data, keymap=None):
                 # turn on the object list behavior flag
                 objlist = True
 
-                # find the index of the object in current field 
+                # find the index of the object in current field
                 index = validatekey(
                     record, key, validkeys=keymap, strict_keys=not_strict,
                     ordered_dict=True)
@@ -254,7 +251,7 @@ def patch_record(record, data, keymap=None):
                         item['key']
                     except TypeError:
                         # good, skip to next item.
-                       continue 
+                       continue
                     except KeyError:
                         # not good, because it implies that even though 'key'
                         # was not found item is still a dict.
@@ -270,8 +267,8 @@ def patch_record(record, data, keymap=None):
 
 
 def _localize_data(data, fields, lang):
-    rv = deepcopy(data) 
-    for field in fields: 
+    rv = deepcopy(data)
+    for field in fields:
         path = field.split('.')
         val = rv
         for p in path[:-1]:
@@ -279,7 +276,7 @@ def _localize_data(data, fields, lang):
         # reset last value to a localized dict
         val[path[-1]] = {lang: val.get(path[-1])}
     return rv
-    
+
 def _merge_localized_data(old, new, fields, lang):
     for field in fields:
         path = field.split('.')
@@ -290,13 +287,13 @@ def _merge_localized_data(old, new, fields, lang):
             newval = newval.setdefault(p, {})
         oldval.setdefault(path[-1], {})[lang] = newval.get(path[-1])
     return oldval
-            
+
 def _delocalize_data(data, fields, lang):
     rv = deepcopy(data)
-    for field in fields: 
+    for field in fields:
         # create a map for each localized field
         path = field.split('.')
-        # resolve the value of the item before last on the map 
+        # resolve the value of the item before last on the map
         # i.e. before the item containing the localized data
         val = rv
         for p in path[:-1]:

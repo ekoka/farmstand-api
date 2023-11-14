@@ -3,24 +3,37 @@ import requests
 from flask import g, request, url_for, current_app as app, jsonify, abort
 from werkzeug import exceptions as werk_exc, Response
 from werkzeug.datastructures import MultiDict
-import re 
+from sqlalchemy.orm import exc as orm_exc
+import re
 import jwt
 
-from . import blueprint as bp
-from b2bapi.db import db
-from b2bapi.db.models.accounts import Account
-from b2bapi.db.models.domains import Domain, DomainAccount
-from b2bapi.utils.cachelib import json_response
-from b2bapi.utils import abc as uls_abc
-from b2bapi.utils.hal import Resource as Hal
+from .. import blueprint as bp
+from ...db import db
+from ...db.models.accounts import Account
+from ...db.models.domains import Domain, DomainAccount
+from ...utils.cachelib import json_response
+from ...utils import abc as uls_abc
+from ...utils.hal import Resource as Hal
+
+def _check_domain_ownership(domain_name, **kw):
+    from ..accounts import _get_account
+    from ..domains import _get_domain_account
+    account = _get_account(g.access_token['account_id'])
+    try:
+        domain = Domain.query.filter_by(name=domain_name).one()
+    except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
+        json_abort(404, {'error': 'Domain not found.'})
+    domain_account = _get_domain_account(
+        domain_id=domain.domain_id, account_id=g.access_token['account_id'])
+    return domain_account.active and domain_account.role=='admin'
 
 def hal():
-    return Hal()._c('productlist', 'https://api.productlist.io/doc/{rel}')
+    return Hal()._c(app.config.API_NAMESPACE, app.config.API_DOC_URL)
 
 # setting domain name in urls that expects it during `url_for()`
 def api_url(*a, **kw):
     url = url_for(*a, **kw)
-    return '/'.join([app.config['API_HOST'].strip('/'), url.lstrip('/')])
+    return '/'.join([app.config.API_HOST.strip('/'), url.lstrip('/')])
 
 @bp.url_defaults
 def set_domain(endpoint, values):
@@ -29,15 +42,26 @@ def set_domain(endpoint, values):
     if app.url_map.is_endpoint_expecting(endpoint, 'domain'):
         values['domain'] = g.domain.name
 
+def id_token_authentication(**kw):
+    scheme, credentials = request.headers['authorization'].split(' ')
+    if scheme.lower()!='bearer':
+        return False
+    try:
+        g.current_account = Account.query.filter_by(id_token=credentials).one()
+        return True
+    except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
+        return False
+
+#TODO: id_token_authentication sets g.current_account to an object, whereas
+# access_token_authentication sets it to a dict. Some consistency would be
+# better.
 
 # removing domain name from values matched in the route and storing it in g
 @bp.url_value_preprocessor
 def domain_extractor(endpoint, values):
     if 'domain' not in values:
         return
-
     domain_name = values.pop('domain')
-
     try:
         domain = Domain.query.filter_by(name=domain_name).one()
     except:
@@ -58,33 +82,23 @@ def json_abort(status_code, data=None):
 def crossorigin(fnc):
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
-        if request.method=='OPTIONS':
-            response = app.make_default_options_response()
-        else:
-            response = fnc(*a, **kw)
+        opt = request.method=='OPTIONS'
+        response = app.make_default_options_response() if opt else fnc(*a, **kw)
         corsify(response)
         return response
     return wrapper
 
 def corsify(response):
-
     allowed_origin_filter = re.compile(app.config['ALLOWED_ORIGINS_REGEX'])
     default_origin = app.config['SERVER_DOMAIN'].strip('/')
     request_origin = request.headers.get('origin', default_origin)
-
     allow_origin_match = allowed_origin_filter.match(request_origin)
-
-    if allow_origin_match:
-        allow_origin = allow_origin_match.group()
-    else:
-        allow_origin = default_origin
-
+    allow_origin = allow_origin_match.group() if allow_origin_match else default_origin
     response.headers['Access-Control-Allow-Origin'] = allow_origin
-
     response.headers[
-        'Access-Control-Allow-Methods']='GET, POST, PUT, DELETE, PATCH, OPTIONS'
+        'Access-Control-Allow-Methods'] = ('GET, POST, PUT, DELETE, PATCH, OPTIONS')
     response.headers[
-        'Access-Control-Allow-Headers']=(
+        'Access-Control-Allow-Headers'] = (
             'Authorization, Content-Type, Cache-Control, X-Requested-With, '
             'Location, access-token, Access-Token, Origin')
     response.headers['Access-Control-Expose-Headers'] = 'Location'
@@ -99,22 +113,16 @@ def corsify(response):
 @bp.errorhandler(409) # see CATCHALL ROUTE next to this
 def errorhandler(error):
     """
-    /!\ CAVEAT /!\ 
+    /!\ CAVEAT /!\
     A Blueprint.errorhandler does not catch unmapped resources based on the
-    url_prefix (e.g. all resources routed to /<someprefix>/url as one might 
+    url_prefix (e.g. all resources routed to /<someprefix>/url as one might
     initially believe. It catches errors raise from within the blueprint. That
     is, once a request has been routed to a view and over the course of that
     run an error was raised, then the Blueprint errorhandler can intervene.
-
-    Because of this, it might be necessary to create a catchall route for the 
+    Because of this, it might be necessary to create a catchall route for the
     Blueprint that receives all unmapped routes based on the prefix and raises
     404 so that this handler can catch it.
     """
-    #response = app.response_class(
-    #    json.dumps({'code': 404, 'error': 'Resource Not Found', }), 
-    #    mimetype='application/json',
-    #)
-    #response = corsify(json_abort(404, {'code':404, 'error': 'Not Found'}))
     response = json_error(
         error.code, {'code':error.code, 'error': error.description})
     return response, error.code
@@ -136,19 +144,17 @@ def parse_keys(multidict):
                 obj = obj.setdefault(k, MultiDict())
     return rv
 
-
-
 def get_json_data():
     try:
         # exception will be raised if content-type is 'application/json'
         # yet there's nothing in request.json
         data = request.get_json()
-    except: 
+    except:
         json_abort(400, {'error': 'Data should be in JSON'})
     # if data is None, then content-type != application/json
     if data is None:
-        json_abort(400, {'error': 'Data expected with Content-Type: '
-                         'application/json'})
+        err = {'error': 'Data expected with Content-Type: application/json'}
+        json_abort(400, err)
     return data
 
 """ a bunch of params injectors for the router """
@@ -160,7 +166,6 @@ def data_injector(fnc):
     return wrapper
 
 def file_injector(fnc, *filenames):
-
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
         # OLD APPROACH: files are sent with their metadata
@@ -183,7 +188,6 @@ def file_injector(fnc, *filenames):
         for name in filenames:
             kw[name] = request.files.getlist(name, None)
         return fnc(*a, **kw)
-
     return wrapper
 
 def params_injector(fnc):
@@ -207,16 +211,14 @@ def access_token_authentication():
     #key = get_access_token_from_cookie()
     if not token:
         return
-
     try:
         secret = app.config['SECRET_KEY']
         #TODO: move the algo in the config
         payload = jwt.decode(token, secret, algorithms=['HS256'])
     except (jwt.DecodeError, jwt.ExpiredSignatureError):
         json_abort(400, {'error': 'Invalid token'})
-
     g.access_token = payload
-    g.current_account = payload 
+    g.current_account = payload
     return True
 
 #def access_token_cookie_setter(fnc):
@@ -224,7 +226,7 @@ def access_token_authentication():
 #    def wrapper(*a, **kw):
 #        response = fnc(*a, **kw)
 #        try:
-#            # a view that expects an access_token to be set must place it in g 
+#            # a view that expects an access_token to be set must place it in g
 #            response.set_cookie(
 #                token='access_token',
 #                value=g.access_token,
@@ -252,10 +254,10 @@ def access_token_authentication():
 #def get_access_token_from_cookie():
 #    access_token_schemes = ['access-token', 'accesstoken', 'access_token']
 #    try:
-#        access_token = next(v for k,v in request.cookies.items() 
+#        access_token = next(v for k,v in request.cookies.items()
 #                          if k in access_token_schemes)
 #        return access_token
-#    except StopIteration: 
+#    except StopIteration:
 #        pass
 
 def domain_privacy_control(**kw):
@@ -264,7 +266,7 @@ def domain_privacy_control(**kw):
         return True
     try:
         return access_token_authentication()
-    except (KeyError, AttributeError, ValueError): 
+    except (KeyError, AttributeError, ValueError):
         return False
 
 def authentication(fnc, processor):
@@ -276,10 +278,8 @@ def authentication(fnc, processor):
         except (KeyError, AttributeError, ValueError) as e:
             authenticated = False
         return authenticated
-
     if processor is True:
         processor = default_processor
-
     @functools.wraps(fnc)
     def wrapper(*a, **kw):
         authenticated = processor(**kw)
@@ -289,13 +289,10 @@ def authentication(fnc, processor):
         #    #    authenticated = proxy_authentication()
         #except (KeyError, AttributeError, ValueError) as e:
         #    authenticated = False
-
         if authenticated:
             return fnc(*a, **kw)
-        json_abort(
-            401, {
-                'error': 'Unauthenticated: invalid or missing authentication '
-                'token.'})
+        err = {'error': 'Unauthenticated: invalid or missing authentication token.'}
+        json_abort(401, err)
     return wrapper
 
 # if a resource must go through authorization an access_token should
@@ -321,7 +318,6 @@ def authorization(fnc, processor):
         # if a resource must go through authorization an access_token should
         # be present in g.
         authorized = processor(**kw)
-
         if authorized or dev_authorized:
             return fnc(*a, **kw)
         json_abort(403, {'error': 'Not authorized'})
@@ -363,8 +359,7 @@ def auth_injector(fnc):
             if scheme.lower()=='bearer':
                 kw['auth'] = {
                     'scheme': 'token',
-                    'token': credentials,
-                }
+                    'token': credentials, }
             elif scheme.lower()=='basic':
                 try:
                     username, password = credentials.split(':')
@@ -373,9 +368,7 @@ def auth_injector(fnc):
                 kw['auth'] = {
                     'scheme': 'Basic',
                     'username': username,
-                    'password': password,
-                }
-
+                    'password': password, }
         except AttributeError:
             kw['auth'] = None
         return fnc(*a, **kw)
@@ -386,7 +379,7 @@ def access_token_injector(fnc):
     def wrapper(*a, **kw):
         kw['access_token'] = g.access_token
         return fnc(*a, **kw)
-    return wrapper 
+    return wrapper
 
 def account_injector(fnc):
     @functools.wraps(fnc)
@@ -412,7 +405,7 @@ def passthrough_view(fnc, passthrough_url):
         except:
             data = {}
         data.update(_data)
-        params = MultiDict(request.args) 
+        params = MultiDict(request.args)
         params.update(_params) if params else _params
         method = request.method
         headers = dict(request.headers)
@@ -439,24 +432,22 @@ def json_response_wrapper(fnc):
             raise TypeError("'NoneType' object returned from view")
         try:
             data, status, headers = data
-        except ValueError as e: # (too many|need more) values to unpack 
+        except ValueError as e: # (too many|need more) values to unpack
             status, headers = 200, []
         # we'll assume that only one value was provided
         return json_response(data, status=status, headers=headers)
     return wrapper
 
 def route(
-    url_pattern, methods=None, domained=True, expects_data=False, 
+    url_pattern, methods=None, domained=True, expects_data=False,
     expects_params=False, expects_files=False, authenticate=False,
     authorize=None, expects_lang=False, expects_access_token=False,
     expects_role=False, expects_domain=False, expects_auth=False,
     passthrough=None, cacheable=False, if_match=False, if_none_match=False,
-    endpoint=None, readonly=False, set_cookie_token=False, 
+    endpoint=None, readonly=False, set_cookie_token=False,
     expects_account=False, **kw):
     """ function to map  route to function """
-
     if methods is None: methods = ['GET',]
-
     def wrapper(view_func):
         fnc = view_func
         _endpoint = endpoint or fnc.__name__
@@ -464,78 +455,63 @@ def route(
         _domained = domained
         _methods = methods
         _authenticate = authenticate
-
         api_actions[_endpoint] = dict(
-            fnc=fnc, 
+            fnc=fnc,
             cacheable=cacheable,
             methods=_methods,
             domained=_domained,
-            expects_account=expects_account, 
-            expects_access_token=expects_access_token, 
-            expects_role=expects_role, 
-            expects_domain=expects_domain, 
+            expects_account=expects_account,
+            expects_access_token=expects_access_token,
+            expects_role=expects_role,
+            expects_domain=expects_domain,
             expects_params=expects_params,
             expects_lang=expects_lang,
             readonly=readonly,
         )
-
-
         #if cacheable:
         #    fnc = cache_wrapper(fnc, cache)
-
-        # expects_data and expects_files are mutually exclusive 
+        # expects_data and expects_files are mutually exclusive
         # having precedence
-
         #if passthrough:
         #    fnc = passthrough_view(fnc, passthrough)
-
         if readonly:
             fnc = dbsession_rollback(fnc)
-
         if expects_files:
             if 'basestring' not in globals():
                 basestring = str
-            if isinstance(expects_files, basestring): 
+            if isinstance(expects_files, basestring):
                 filenames = [expects_files]
-            else: 
+            else:
                 filenames = expects_files
             fnc = file_injector(fnc, *filenames)
         elif expects_data:
             fnc = data_injector(fnc)
-
         if expects_params:
             fnc = params_injector(fnc)
-
         if expects_lang:
             fnc = lang_injector(fnc)
-
         if expects_domain:
-            # domain are extracted from the route by default, in a preprocessor 
+            # domain are extracted from the route by default, in a preprocessor
             # defined earlier in this module. Let's reinject them:
             fnc = domain_injector(fnc)
             _domained = True
-
         if _domained:
             # domained is True by default, meaning that routes that do not
             # require a domain should explicitly set this to False.
             # it simply prefixes an url_pattern with the domain placeholder.
-
             # It is separate from a the previous option (expects_domain)
             # because even though most routes are domained, most endpoints do
             # not expect that information by default.
             # Splitting these options allows to control these requirements.
             _url_pattern = '/<domain>/' + _url_pattern.lstrip('/')
-
         if expects_role:
             # cannot have role without authentication
             _authenticate = _authenticate or True
             fnc = role_injector(fnc)
-
         if expects_access_token:
             # cannot have access_token if user not authenticated
             _authenticate = _authenticate or True
             fnc = access_token_injector(fnc)
-
         if expects_account:
             # cannot have access_token if user not authenticated
             if not _authenticate:
@@ -543,36 +519,30 @@ def route(
                     'The `expects_account` directive requires a user provided '
                     'authentication processor.')
             fnc = account_injector(fnc)
-
         if expects_auth:
             # cannot pass auth without authentication
             _authenticate = _authenticate or True
             fnc = auth_injector(fnc)
-
         if authorize:
             # cannot have authz without authn
             _authenticate = _authenticate or True
             fnc = authorization(fnc, processor=authorize)
-
         if _authenticate:
             fnc = authentication(fnc, _authenticate)
-
-
         fnc = json_response_wrapper(fnc)
-
         # access_token
         if set_cookie_token:
             fnc = access_token_cookie_setter(fnc)
-
         # crossorigin
         fnc = crossorigin(fnc)
         if 'OPTIONS' not in methods:
             methods.append('OPTIONS')
-
-        bp.add_url_rule(_url_pattern, endpoint=_endpoint, view_func=fnc,
-                               methods=_methods, **kw)
-
+        bp.add_url_rule(
+            _url_pattern, endpoint=_endpoint, view_func=fnc, methods=_methods, **kw)
         # make sure the view_func is still usable out of the request context
         return view_func
-
     return wrapper
+
+def explicit_route(url_pattern, view_func, *a, **kw):
+    wrapper = route(url_pattern, *a, **kw)
+    return wrapper(view_func)

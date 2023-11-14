@@ -9,6 +9,7 @@ db = SQLAlchemy()
 class Integer(TypeDecorator):
 
     impl = db.Integer
+    cache_ok = True
 
     def process_bind_param(self, value, dialect):
         if isinstance(value, str):
@@ -19,7 +20,7 @@ class Integer(TypeDecorator):
         return value
 
 def populate(self, **data):
-    for k,v in data.items(): 
+    for k,v in data.items():
         if hasattr(self, k):
             setattr(self, k, v)
 

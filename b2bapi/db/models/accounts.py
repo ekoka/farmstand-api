@@ -3,7 +3,7 @@ from uuid import uuid4
 import bcrypt
 from sqlalchemy.ext.hybrid import hybrid_property
 from datetime import datetime as dtm
-from b2bapi.utils.password import match_passwords, encrypt_password
+from ...utils.password import match_passwords, encrypt_password
 
 """
 - Each user has a single account.
@@ -12,8 +12,7 @@ class Account(db.Model):
     __tablename__ = 'accounts'
     account_id = db.Column(db.UUID, primary_key=True, default=uuid4)
     stripe_customer_id = db.Column(db.Unicode, unique=True, nullable=False)
-    first_name = db.Column(db.Unicode)
-    last_name = db.Column(db.Unicode)
+    name = db.Column(db.Unicode)
     email = db.Column(db.Unicode, unique=True)
     _password = db.Column('password', db.Unicode)
     lang = db.Column(db.Unicode, default='en')
@@ -21,7 +20,7 @@ class Account(db.Model):
     id_token = db.Column(db.Unicode, unique=True, nullable=True)
     confirmed = db.Column(db.Boolean, default=False)
 
-    # these fields should be localized in the `data` json 
+    # these fields should be localized in the `data` json
     localized_fields = ['organization', 'role', 'bio', 'location',]
 
     @property
@@ -116,14 +115,14 @@ class Invite(db.Model, db.DomainMixin):
     #status_change = db.Column(db.DateTime)
 
 
-class User(db.Model, db.DomainMixin):
-    """
-    Table of accounts that were granted access to domain.
-    """
-    __tablename__ = 'users'
-    account_id = db.Column(
-        None, db.ForeignKey('accounts.account_id'), primary_key=True)
-
+#class User(db.Model, db.DomainMixin):
+#    """
+#    Table of accounts that were granted access to domain.
+#    """
+#    __tablename__ = 'users'
+#    account_id = db.Column(
+#        None, db.ForeignKey('accounts.account_id'), primary_key=True)
+#
 #    domain = db.relationship('Domain', backref='invites')
 #
 
@@ -144,7 +143,7 @@ class Signin(db.Model):
     #    self.failure = 0
     #    return True
     #    # TODO:  update `last_successful` to dtm.now()
-    #        
+    #
 
     #def clear_passcode(self):
     #    self.passcode = None
@@ -187,124 +186,6 @@ class Signin(db.Model):
 
 
 # TODO: ENABLE class UserView(db.Model): __abstract__=True
-# TODO: ENABLE view_mapper('users_view', User.__table__.select(), db.metadata, UserView, 
+# TODO: ENABLE view_mapper('users_view', User.__table__.select(), db.metadata, UserView,
 # TODO: ENABLE             db.Column('user_id', db.Integer, db.ForeignKey(
 # TODO: ENABLE                 'users.user_id'), primary_key=True))
-
-
-
-
-#
-#"""
-#- Each email can be linked to multiple profiles.
-#"""
-#class Profile(db.Model):
-#
-#    __tablename__ = 'profiles'
-#
-#    profile_id = db.Column(db.UUID, primary_key=True, default=uuid4)
-#    account_email_id = db.Column(
-#        None, db.ForeignKey('account_emails.account_email_id'), nullable=False)
-#    profile_name = db.Column(db.Unicode)
-#    first_name = db.Column(db.Unicode)
-#    middle_name = db.Column(db.Unicode)
-#    last_name = db.Column(db.Unicode)
-#    title = db.Column(db.Unicode) # Mr, Mrs, Dr, Pr
-#    company = db.Column(db.Unicode)
-#    role = db.Column(db.Unicode) # CEO, CTO
-#    contact = db.Column(db.JSONB, default=dict)
-#    """
-#    phone:
-#        mobile:
-#        work:
-#    address1
-#    address2
-#    city
-#    state_province
-#    zip_postal_code
-#    country
-#    """
-#    preferred_languages = db.Column(db.JSONB, default=dict)
-#    data = db.Column(db.JSONB, default=dict)
-#    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
-#    # is primary profile for this account
-#    is_primary = db.Column(db.Boolean, default=False) 
-#
-#    # relationships
-#    email = db.relationship('AccountEmail', backref='profiles')
-
-
-#class AccountUnverifiedEmail(db.Model):
-#    __tablename__ = 'account_unverified_emails'
-#
-#    account_email_id = db.Column(db.UUID, primary_key=True)
-#    account_id = db.Column(None, db.ForeignKey('accounts.account_id'))
-#    email = db.Column(db.Unicode, unique=True, nullable=False)
-#    status = db.Column(db.Unicode, default='pending')
-#    email_sent = db.Column(db.DateTime)
-#
-#    account = db.relationship(
-#        'Account', backref=db.backref("unverified_emails"))
-#
-#
-#"""
-#- An account could administer multiple domains to some capacity.
-#- Only one role per account per domain.
-#"""
-#class AccountRoles(db.Model, db.DomainMixin):
-#
-#    __tablename__ = 'account_roles'
-#
-#    account_id = db.Column(
-#        None, db.ForeignKey('accounts.account_id'), primary_key=True)
-#    role = db.Column(db.Unicode)
-#    """
-#        admin
-#        sales manager
-#        sales rep
-#    """
-#
-#
-#"""
-#- A user can request access to a merchant's catalog.
-#"""
-#class AccessRequest(db.Model, db.DomainMixin):
-#
-#    __tablename__ = 'access_requests'
-#
-#    account_email_id = db.Column(
-#        None, db.ForeignKey('account_emails.account_email_id'),
-#        primary_key=True)
-#    status = db.Column(db.Unicode) # pending, accept, reject
-#    request_date = db.Column(db.DateTime)
-#    accept_date = db.Column(db.DateTime)
-#    status_change = db.Column(db.DateTime)
-#
-#    account_email = db.relationship('AccountEmail', backref='access_requests')
-#    domain = db.relationship('Domain', backref='access_requests')
-#
-#
-#"""
-#- A merchant can have many clients. Some of whom might not have an account.
-#- A client with an account that has accepted a merchant's invite becomes
-#linked.
-#- The email field cannot be modified in a linked address.
-#"""
-#class Client(db.Model, db.DomainMixin):
-#
-#    __tablename__ = 'clients'
-#
-#    client_id = db.Column(db.UUID, primary_key=True)
-#    email = db.Column(db.Unicode, unique=True, nullable=True)
-#    linked = db.Column(db.Boolean) # linked to an Account (via email)
-#    data = db.Column(db.JSONB, default=dict)
-#
-#    domain = db.relationship('Domain', backref='clients')
-#    # TODO: create a relationship linking account_email and client
-#    # based on 'AccountEmail.email==Client.email'
-#    account_email = db.relationship(
-#        'AccountEmail', backref='client_profiles', 
-#        primaryjoin='(AccountEmail.email==Client.email)&\
-#        (AccountEmail.verified & Client.linked)')
-#
-#

@@ -1,14 +1,12 @@
-import uuid
-from flask import g, abort, current_app as app, url_for
-from sqlalchemy import exc
+from flask import g, abort, current_app as app
 from sqlalchemy.orm import exc as orm_exc
 from vino import errors as vno_err
 
-from b2bapi.db.models.meta import Field
-from b2bapi.db import db
-from b2bapi.utils.uuid import clean_uuid
+from ..db import db
+from ..db.models.meta import Field
+from ..utils.uuid import clean_uuid
 from .validation.meta import add_field, edit_field
-from ._route import route, api_url
+from .routes.routing import api_url
 
 def _get_field(field_id):
 
@@ -24,7 +22,6 @@ def _get_field(field_id):
         # TODO: better message
         abort(404)
 
-@route('/fields', methods=['POST'], expects_data=True)
 def post_field(data):
     try:
         data = add_field.validate(data)
@@ -44,15 +41,14 @@ def post_field(data):
         abort(409)
 
     redirect_url = api_url('api.get_field', field_id=clean_uuid(record.field_id))
-    return ({'location':redirect_url, 'field_id':clean_uuid(record.field_id)}, 
+    return ({'location':redirect_url, 'field_id':clean_uuid(record.field_id)},
              201, [('Location',redirect_url)])
 
 #TODO: validate field_type vs schema
 
-@route('/fields/<field_id>', methods=['PUT'], expects_data=True)
 def put_field(field_id, data):
     record = _get_field(field_id)
-    # this is mostly to be safe, only the schema field is updated 
+    # this is mostly to be safe, only the schema field is updated
     # on the record
     #def pop_members(data, state):
     #    for m in ['field_id', 'field_type', 'name', 'domain_id']:
@@ -63,18 +59,17 @@ def put_field(field_id, data):
         data = edit_field.validate(data)
         schema = data.pop('schema', None)
         for k, v in data.items():
-           setattr(record, k, v) 
+           setattr(record, k, v)
         if schema:
             record.set_schema(schema, g.lang)
     except vno_err.ValidationErrorStack as es:
-        # TODO: work with validation here 
+        # TODO: work with validation here
         abort(400)
 
     db.session.flush()
     redirect_url = api_url('api.get_field', field_id=clean_uuid(record.field_id))
     return ({}, 200, [])
 
-@route('/fields/<field_id>', methods=['DELETE'])
 def delete_field(field_id):
     fields = Field.__table__
     field_id = clean_uuid(field_id)
@@ -94,16 +89,14 @@ def field_resource(record):
     }
     return rv
 
-@route('/fields/<field_id>', methods=['GET'])
 def get_field(field_id):
     try:
-        record = Field.query.filter_by(domain_id=g.domain['domain_id'], 
+        record = Field.query.filter_by(domain_id=g.domain['domain_id'],
                                 field_id=field_id).one()
     except orm_exc.NoResultFound as e:
         abort(404)
     return field_resource(record), 200, []
 
-@route('/fields', methods=['GET'])
 def get_fields():
     rv = {
         'self': api_url('api.get_fields'),
@@ -115,4 +108,4 @@ def get_fields():
             # domain_id=g.domain['domain_id']).all()],
     }
     return rv, 200, []
-# \Fields 
+# \Fields

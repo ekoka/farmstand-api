@@ -26,13 +26,13 @@ edit_field = obj(
 add_product_type = obj(
     prim(~vld.required, remove).apply_to('self'),
     prim(vld.required(override=set_domain)).apply_to('domain_id'),
-    prim(vld.required(default=set_uuid), 
+    prim(vld.required(default=set_uuid),
          vld.rejectnull(failsafe=set_uuid),
          check_uuid4,).apply_to(
         'product_type_id'),
     prim().apply_to('name'),
-    obj(vld.allownull, vld.allowempty, 
-        arr(vld.allowempty, vld.allownull, 
+    obj(vld.allownull, vld.allowempty,
+        arr(vld.allowempty, vld.allownull,
             obj().apply_to(30)).apply_to('fields')
        ).apply_to('schema'),
 )

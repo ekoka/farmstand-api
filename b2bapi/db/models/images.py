@@ -23,9 +23,9 @@ class SourceImage(db.DomainMixin, db.Model,):
 
     # source_image_id will be the blob's signature which is a sha1 hash of the
     # file's contents.
-    source_image_id = db.Column(db.Unicode, primary_key=True) 
+    source_image_id = db.Column(db.Unicode, primary_key=True)
     meta = db.Column(db.JSONB)
-    """ { 
+    """ {
         "original_name": <original_name>,
         "filename": <filename>,
         "filesize" : <size>,
@@ -40,11 +40,11 @@ class BaseImage(db.DomainMixin, db.Model):
     Compressed copies of the original uploaded source.
 
     2 types of copies:
-    - main: 
+    - main:
         - unique
-        - simple compressed version of uploaded source image. 
+        - simple compressed version of uploaded source image.
         - no cropping, only resizing.
-    - others: 
+    - others:
         - useful when a specific region of the uploaded source is desired.
 
     For both types, a set of aspect ratios are calculated.
@@ -57,7 +57,7 @@ class BaseImage(db.DomainMixin, db.Model):
     source_image_id = db.Column(None)
     name = db.Column(db.Unicode, nullable=False, default='main')
     meta = db.Column(db.JSONB)
-    """ { 
+    """ {
         "filename": <filename>,
         "signature": <signature>,
         "filesize" : <size>,
@@ -78,7 +78,7 @@ class BaseImage(db.DomainMixin, db.Model):
 
     __table_args__ = (
         db.ForeignKeyConstraint(
-            [source_image_id, 'domain_id'], 
+            [source_image_id, 'domain_id'],
             ['source_images.source_image_id', 'source_images.domain_id'],
         ),
         db.UniqueConstraint('domain_id', 'source_image_id', 'name'),
@@ -91,7 +91,7 @@ class BaseImage(db.DomainMixin, db.Model):
 
 class ProductImage(db.DomainMixin, db.Model):
     """Images associated to a product. The image must first be added to the
-    source image collection, via upload, if it's present on the user's local 
+    source image collection, via upload, if it's present on the user's local
     machine, or via download, if it's on a remote server or cloud service.
     """
     __abstract__ = False
@@ -101,7 +101,7 @@ class ProductImage(db.DomainMixin, db.Model):
     product_id = db.Column(None)
     base_image_id = db.Column(None)
     data = db.Column(db.JSONB) # defaults to ImageFormat.data
-    """ { 
+    """ {
             "position": 1,
             "en" : {
                 "title" : null,
@@ -114,10 +114,10 @@ class ProductImage(db.DomainMixin, db.Model):
     } """
 
     __table_args__ = (
-        db.ForeignKeyConstraint([product_id, 'domain_id'], 
+        db.ForeignKeyConstraint([product_id, 'domain_id'],
                                 ['products.product_id', 'products.domain_id']),
         db.ForeignKeyConstraint(
-            [base_image_id, 'domain_id'], 
+            [base_image_id, 'domain_id'],
             ['base_images.base_image_id', 'base_images.domain_id']
         ),
     )
@@ -132,7 +132,7 @@ class ImageUtil:
 
     def __init__(self, image_file, config=None, context=None):
         if config is None:
-            config = self._default_config()  
+            config = self._default_config()
         self.config = config
 
         if context is None:
@@ -174,7 +174,7 @@ class ImageUtil:
                     filename = self.image_file.name
                 except AttributeError:
                     filename = None
-            self._original_name = (secure_filename(filename) 
+            self._original_name = (secure_filename(filename)
                                    if filename is not None else None)
         return self._original_name
 
@@ -189,7 +189,7 @@ class ImageUtil:
     @property
     def extension(self):
         if not getattr(self, '_extension', None):
-            try: 
+            try:
                 self._extension = self.config[
                     'SUPPORTED_FORMATS'][self.image.format]
             except KeyError:
@@ -221,7 +221,7 @@ class ImageUtil:
     def filepath(self):
         if not getattr(self, '_filepath', None):
             self._filepath = os.path.join(
-                self.config['DUMP'], 
+                self.config['DUMP'],
                 self.context,
                 self.path_prefix,
                 self.filename)
@@ -232,7 +232,7 @@ class ImageUtil:
         """ REDUNDANT: for documentation purposes mostly """
         if not getattr(self, '_data', None):
             self._data = dict(
-                original_name=self.original_name, 
+                original_name=self.original_name,
                 format=self.image.format,
                 extension=self.extension,
                 width=self.image.width,
@@ -245,7 +245,7 @@ class ImageUtil:
 
     def _default_config(self):
         return dict(
-            DUMP = '/tmp/productlist/images',
+            DUMP = '/tmp/producelist/images',
             MAX_FILESIZE = 10000000, #10mb
             ASPECT_RATIO = (0.3333, 3.0),
             WEB_MAX_LENGTH = 900, # max width/height length
@@ -307,7 +307,3 @@ class ImageUtil:
         f.seek(0)
         yield f
         f.seek(pos)
-        
-
-    
-

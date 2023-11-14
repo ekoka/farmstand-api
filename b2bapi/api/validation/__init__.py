@@ -43,7 +43,7 @@ def check_uuid4(data, state=None):
 def set_uuid(data, state=None):
     return uuid.uuid4().hex
 
-                                                                                
+
 def upper(data, state=None):
     try:
         return data.upper()
@@ -84,7 +84,7 @@ class ExtraProperties(prc.Processor):
         for k in data.keys():
             if k not in self.matches['by_key']:
                 raise vno_err.ValidationError('Key not in schema')
-        # if all went well we simply return data to stay consistent with 
+        # if all went well we simply return data to stay consistent with
         # common usage.
         return data
 

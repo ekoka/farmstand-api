@@ -6,12 +6,12 @@ import slugify
 from datetime import datetime as dtm, timedelta
 from functools import reduce
 
-from b2bapi.db.models.domains import Domain
-from b2bapi.db.models.billing import Plan, Billable
-from b2bapi.db.models.accounts import PaymentSource
-from b2bapi.db import db
-from b2bapi.utils.uuid import clean_uuid
-from ._route import route, api_url, json_abort, hal
+from ..db.models.domains import Domain
+from ..db.models.billing import Plan, Billable
+from ..db.models.accounts import PaymentSource
+from ..db import db
+from ..utils.uuid import clean_uuid
+from .routes.routing import api_url, json_abort, hal
 from .utils import localize_data, delocalize_data, StripeContext
 
 from .accounts import _get_account
@@ -28,7 +28,6 @@ def _plan_resource(p, lang):
     #rv._k('data', delocalize_data(p.data, Plan.localized_fields, lang))
     return rv.document
 
-@route('/plans/<plan_id>', domained=False, expects_lang=True)
 def get_plan(plan_id, lang):
     try:
         plan = Plan.query.filter_by(plan_id=plan_id).one()
@@ -36,7 +35,6 @@ def get_plan(plan_id, lang):
         json_abort(404, {'error': 'Plan not found.'})
     return _plan_resource(plan, lang), 200, []
 
-@route('/plans', expects_params=True, domained=False, expects_lang=True)
 def get_plans(params, lang):
     plans = Plan.query.all()
     plans = sorted(plans, key= lambda p: p.data.get('amount', 0))
@@ -45,7 +43,6 @@ def get_plans(params, lang):
     rv._embed('plans', [_plan_resource(p, lang) for p in plans])
     return rv.document, 200, []
 
-@route('/usage/<year>/<month>', domained=False, expects_access_token=True)
 def get_usage(access_token, year, month):
     # validate month and year
     # calculate month's daily charges
@@ -55,8 +52,6 @@ def get_usage(access_token, year, month):
     rv = hal()
     rv._link('self', api_url('api.get_usage'))
 
-@route('/payment-sources', methods=['POST'], authenticate=True,
-       expects_access_token=True, domained=False, expects_data=True)
 def post_payment_source(access_token, data):
     #TODO: validation
     # data = payment_source.validate(data)
@@ -76,8 +71,6 @@ def post_payment_source(access_token, data):
         db.session.flush()
     return {}, 200, []
 
-@route('/payment-sources', authenticate=True, expects_access_token=True, 
-       domained=False)
 def get_payment_sources(access_token):
     sources = PaymentSource.query.filter_by(
         account_id=access_token['account_id']).all()
@@ -90,15 +83,13 @@ def get_payment_sources(access_token):
     return rv.document, 200, []
 
 def _get_source_data(source):
-    fields = ['brand', 'last4', 'exp_year', 'exp_month', 
+    fields = ['brand', 'last4', 'exp_year', 'exp_month',
               'address_zip']
     rv = {f: source.data.get(f) for f in fields}
     rv['source_id'] = source.source_id
     rv['default_source'] = source.default_source
     return rv
 
-@route('/payment-sources/<source_id>', methods=['DELETE'], authenticate=True,
-       expects_access_token=True, domained=False)
 def delete_payment_source(source_id, access_token):
     account = _get_account(access_token['account_id'])
     sources = PaymentSource.query.filter_by(
@@ -114,4 +105,3 @@ def delete_payment_source(source_id, access_token):
             else:
                 s.default_source = s.source_id==customer.default_source
     return {}, 200, []
-

@@ -45,7 +45,7 @@ class DomainAccount(db.Model, db.DomainMixin):
 
 class DomainAccessRequest(db.Model):
     """
-    User can request access to a merchant's catalog.
+    A user can request access to a merchant's catalog.
     """
     __tablename__ = 'domain_access_requests'
     access_request_id = db.Column(db.UUID, primary_key=True, default=uuid4)
@@ -53,7 +53,7 @@ class DomainAccessRequest(db.Model):
         None, db.ForeignKey('accounts.account_id'), nullable=False)
     domain_id = db.Column(
         None, db.ForeignKey('domains.domain_id'), nullable=False)
-    creation_date = db.Column(db.DateTime, default=dtm.utcnow) 
+    creation_date = db.Column(db.DateTime, default=dtm.utcnow)
     status = db.Column(db.Unicode)
     data = db.Column(db.JSONB, default=dict)
 

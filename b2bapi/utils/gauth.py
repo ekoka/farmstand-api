@@ -9,8 +9,34 @@ from flask import current_app as app
 from google.oauth2 import id_token
 from google.auth.transport import requests as gauth_requests
 
+
+"""
+How to use:
+
+def _verify_google_token(token):
+    ggauth = GAuth(
+        client_id=app.config.GOOGLE_CLIENT_ID,
+        secret=app.config.GOOGLE_SECRET,
+        redirect_uri=app.config.GOOGLE_REDIRECT_URI)
+    return ggauth.verify_token(token)
+
+def _verify_auth_token(data):
+    provider, token = data.get('provider').lower(), data.get('token')
+    if not token:
+        json_abort(400, {'error':'Missing authentication token'})
+    if not provider:
+        json_abort(400, {'error': 'Missing authentication provider'})
+    if provider=='google':
+        return _verify_google_token(token)
+    # ... other providers
+    if provider=='acme':
+        _verify_acme_token(token)
+    json_abort(401, {'error': 'Not authorized (unrecognized token)'})
+
+"""
+
 class GAuth:
-    def __init__(self, client_id, secret, redirect_uri='localhost:8080'):
+    def __init__(self, client_id, secret, redirect_uri):
         self.CONFIG = {
             'client_id' : client_id,
             'secret': secret,
@@ -64,9 +90,9 @@ class GAuth:
         token_endpoint = self.document['token_endpoint']
         return requests.post(token_endpoint, data={
             'code': code,
-            'client_id': config['client_id'], 
+            'client_id': config['client_id'],
             'client_secret': config['secret'],
-            'redirect_uri': config['redirect_uri'], 
+            'redirect_uri': config['redirect_uri'],
             'grant_type': 'authorization_code',
             # 'access_type': 'offline', # to include refresh_token in response
         }).json()

@@ -2,19 +2,19 @@ from vino.api.schema import obj, arr, prim
 from vino.processors import validating as vld
 from vino.processors.validating import required, rejectnull, allowempty
 
-from . import (set_domain, check_bool, check_uuid4,  set_uuid, 
+from . import (set_domain, check_bool, check_uuid4,  set_uuid,
                upper, remove, set_value)
 
 # each field is an object
-field_schema = obj( 
+field_schema = obj(
     # it has a name
-    prim().apply_to('name'), 
+    prim().apply_to('name'),
     # it has a `searchable` and `display` attribute that are both
     # required. If they're not present, they're set to `False` by
     # default.
     # They must be a boolean.
     prim(required(default=set_value(False)), check_bool).apply_to(
-         'searchable', 'display'), 
+         'searchable', 'display'),
     #TODO: we need a flexible validator that can handle values, arrays
     # and objects
     #prim(~required).apply_to('value'),
@@ -29,14 +29,14 @@ field_arr = arr(
     # each item in the range 0-20 of the array will be validated using the
     # `field_schema`
     field_schema.apply_to(range(0,20)),
-    # the resulting field array can be empty 
+    # the resulting field array can be empty
     allowempty,
 )
 
 # TODO: add an extrafield blocker
 add_product = obj(
     prim(required(override=set_domain)).apply_to('domain_id'),
-    prim(required(default=set_uuid), rejectnull(failsafe=set_uuid), 
+    prim(required(default=set_uuid), rejectnull(failsafe=set_uuid),
          check_uuid4).apply_to('product_id'),
     prim(required(default=set_value(False)), check_bool).apply_to('visible'),
     # TODO make sure the product_family exists

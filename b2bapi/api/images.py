@@ -9,20 +9,14 @@ from flask import g, current_app as app, url_for
 from sqlalchemy import exc
 from sqlalchemy.orm import exc as orm_exc
 
-from b2bapi.db.models.images import (
-    SourceImage, BaseImage, ImageUtil, ProductImage)
-from b2bapi.db import db
-from b2bapi.utils.uuid import clean_uuid
-from b2bapi.utils.randomstr import randomstr
+from ..db import db
+from ..db.models.images import SourceImage, BaseImage, ImageUtil, ProductImage
+from ..utils.uuid import clean_uuid
+from ..utils.randomstr import randomstr
 
-from ._route import (
-    route, api_url, json_abort, hal,
-    domain_owner_authorization as domain_owner_authz,
-)
+from .routes.routing import api_url, json_abort, hal
 from .validation import images as validators
 
-@route('/source-images', methods=['POST'], expects_files=['image'],
-       expects_domain=True, authorize=domain_owner_authz)
 def post_source_image(domain, image=None):
     # TODO: move this initialization inside POSTing of SourceImage
     source_file = image[0]
@@ -58,7 +52,7 @@ def post_source_image(domain, image=None):
                 source=srcimg_record,
             )
             set_aspect_ratios(main_base)
-            
+
             db.session.add(srcimg_record)
             db.session.flush()
     except (IOError, TypeError) as e:
@@ -75,8 +69,6 @@ def post_source_image(domain, image=None):
         rv._l('image', api_url('api.get_image', image_id=main_base.base_image_id))
     return rv.document, 200, ()
 
-@route('images', expects_domain=True, expects_params=True,
-       authorize=domain_owner_authz)
 def get_images(domain, params):
     params = validators.aspect_ratios.validate(params)
     rv = hal()
@@ -124,7 +116,7 @@ def img_aspect_ratios(image, aspect_ratios=None, sizes=None):
     #TODO: get this from config
     crypto = CryptoURL(key='MY_SECURE_KEY')
     # determine the widest side
-    largest = ('width' if image.meta['width'] >= image.meta['height'] 
+    largest = ('width' if image.meta['width'] >= image.meta['height']
                else 'height')
     try:
         # TODO get this from config
@@ -145,7 +137,6 @@ def img_aspect_ratios(image, aspect_ratios=None, sizes=None):
         raise
     return rv
 
-#@route('/source-images/<image_id>', expects_domain=True)
 #def get_source_image(image_id, domain):
 #    record = _get_source_image(image_id, domain.domain_id)
 #    return rv, 200, ()
@@ -153,13 +144,12 @@ def img_aspect_ratios(image, aspect_ratios=None, sizes=None):
 def _image_resource(image, **params):
     aspect_ratios = img_aspect_ratios(image, **params)
 
-    rv = hal() 
+    rv = hal()
     rv._k('image_id', image.base_image_id)
     rv._l('self', api_url('api.get_image', image_id=image.base_image_id))
     rv._k('aspect_ratios', aspect_ratios)
     return rv
 
-@route('/images/<image_id>', expects_domain=True)
 def get_image(image_id, domain):
     try:
         image = BaseImage.query.get((image_id, domain.domain_id))
@@ -169,21 +159,17 @@ def get_image(image_id, domain):
     rv = _image_resource(image)
     return rv.document, 200, []
 
-@route('/products/<product_id>/images', expects_domain=True, 
-       authorize=domain_owner_authz, expects_params=True)
 def get_product_images(product_id, domain, params):
     product_imgs = ProductImage.query.filter_by(
         product_id=product_id, domain_id=domain.domain_id).all()
     product_imgs.sort(key=lambda pi: pi.data.get('position'))
     rv = hal()
     rv._l('self', api_url('api.get_product_images', product_id=product_id))
-    images = [_image_resource(prodimg.image).document 
+    images = [_image_resource(prodimg.image).document
               for prodimg in product_imgs]
     rv._embed('images', images)
     return rv.document, 200, []
 
-@route('/products/<product_id>/images', methods=['PUT'], expects_domain=True,
-       expects_data=True, authorize=domain_owner_authz)
 def put_product_images(product_id, domain, data):
     db.session.execute(db.text(
         'delete from product_images '
@@ -201,12 +187,7 @@ def put_product_images(product_id, domain, data):
     db.session.flush()
     return {}, 200, []
 
-
-
-
-
 # NOTE: might not be useful
-@route('/source-images-meta', methods=['POST'], expects_data=True)
 def post_source_image_meta(data):
     data = add_source_image.validate(data)
     src_img = SourceImage(**data)
@@ -252,7 +233,7 @@ def crop_to_aspect_ratio(aspect_ratio, current):
     rv = dict(name=aspect_ratio)
     horizontal = current['width']>=current['height']
     target = {}
-    # calculate the goal ratio 
+    # calculate the goal ratio
     target_ratio = ar[0]/ar[1]
 
     if horizontal:
@@ -273,7 +254,7 @@ def crop_to_aspect_ratio(aspect_ratio, current):
         crop[b] = (current[height] - target[height])/2
         crop[c] = target[width]
         crop[d] = crop[b] + target[height]
-    else: 
+    else:
         # cropping width
         target[height] = current[height]
         target[width] = current[height] * target_ratio
@@ -312,7 +293,7 @@ def set_aspect_ratios(base_image):
 #
 #    target = {}
 #
-#    # calculate the goal ratio 
+#    # calculate the goal ratio
 #    target['ratio'] = ar[0]/ar[1]
 #    crop = {}
 #
@@ -326,7 +307,7 @@ def set_aspect_ratios(base_image):
 #        #    crop['b'] = (current[height] = target[height])/2
 #        #    crop['c'] = target[width]
 #        #    crop['d'] = crop['b'] + target[height]
-#        #else: 
+#        #else:
 #        #    crop['a'] = (current[height] = target[height])/2
 #        #    crop['b'] = 0
 #        #    crop['c'] = crop['a'] + target[height]
@@ -336,7 +317,7 @@ def set_aspect_ratios(base_image):
 #        crop[b] = (current[height] - target[height])/2
 #        crop[c] = target[width]
 #        crop[d] = crop[b] + target[height]
-#    else: 
+#    else:
 #        # cropping width
 #        target[height] = current[height]
 #        target[width] = current[height] * target['ratio']

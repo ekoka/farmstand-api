@@ -1,17 +1,15 @@
 import bcrypt
-from vino.api.schema import prim
-from vino.processors import validating as vld
 from vino import errors as vno_err
 from sqlalchemy.orm import exc as orm_exc
 
-from b2bapi.db.models.security import CommonWord as Word
+from ..db.models.security import CommonWord as Word
 
 
 def dictionary_match(data, state):
-    try: 
+    try:
         q = Word.query.filter_by(word=data)
         q.one()
-    except orm_exc.NoResultFound as e: 
+    except orm_exc.NoResultFound as e:
         # we didn't find it in the dict, it may be secure
         return data
     raise vno_err.ValidationError('Password is too common.')
@@ -54,7 +52,7 @@ def alphanum_sequence(minlength=None):
         if minlength:
             if len(data) >= minlength:
                 return data
-        # we first assume that this is a sequence 
+        # we first assume that this is a sequence
         # and we want to be proven wrong
         seq_asc = seq_desc = True
         # we'll be working with a generator of letter ordinals (integer)
@@ -65,7 +63,7 @@ def alphanum_sequence(minlength=None):
         while True:
             try:
                 # if the ascending flag is still up it means we're going up.
-                # Idem if left is less than right by 1. 
+                # Idem if left is less than right by 1.
                 if seq_asc and left==right-1:
                     # we're ascending we can't be descending.
                     seq_desc = False
@@ -83,7 +81,7 @@ def alphanum_sequence(minlength=None):
                     break
                 # when we move left becomes right and right gets the next value
                 left, right = right, next(ordgen)
-            except StopIteration: 
+            except StopIteration:
                 # end of string
                 break
 
