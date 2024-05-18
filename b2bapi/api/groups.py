@@ -17,9 +17,9 @@ def get_groups(lang, domain):
     groups = Group.query.filter_by(domain_id=domain.domain_id).all()
     rv = hal()
     rv._l('self', api_url('api.get_groups'))
-    rv._l('producelist:group', api_url(
+    rv._l(f'{app.config.API_NAMESPACE}:group', api_url(
         'api.get_group', group_id='{group_id}'), templated=True, unquote=True)
-    rv._l('producelist:group_resources', api_url('api.get_group_resources'))
+    rv._l(f'{app.config.API_NAMESPACE}:group_resources', api_url('api.get_group_resources'))
     rv._k('group_ids', [g.group_id for g in groups])
     return rv.document, 200, []
 

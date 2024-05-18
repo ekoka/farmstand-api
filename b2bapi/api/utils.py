@@ -1,9 +1,9 @@
 """
 How to handle data in arrays during a merge (i.e. during atomic updates)?
 
-The following is a convention used within the Producelist's api to manage data
-contained in arrays in a way that facilitates atomic updates. It's not meant to
-become a standard beyond the scope of this platform.
+The following is a convention used within the API to manage data contained
+in arrays in a way that facilitates atomic updates. It's not meant to become
+a standard beyond the scope of this platform.
 
 - During atomic updates we divide the use of arrays into two distinct groups:
     - the first group (group1) can only hold items of object data type.

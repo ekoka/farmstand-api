@@ -1,6 +1,8 @@
 *.pyc
 .cache
 .env
+.dockerenv
+.dockerignore
 *config.py
 *config.ini
 gunicorn.service
@@ -12,3 +14,4 @@ uwsgi.ini
 logs
 */config/*secret*
 private
+build.log

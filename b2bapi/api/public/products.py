@@ -2,6 +2,7 @@ import simplejson as json
 from urllib import parse
 
 from sqlalchemy.orm import exc as orm_exc
+from flask import current_app as app
 
 from ...db import db
 from ...db.models.products import Product, ProductSchema as PSchema
@@ -73,7 +74,7 @@ def get_public_products(params, domain):
     product_url = api_url('api.get_public_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', api_url('api.get_public_products',**params))
-    rv._l('producelist:product', product_url, unquote=True, templated=True)
+    rv._l(f'{app.config.API_NAMESPACE}:product', product_url, unquote=True, templated=True)
     rv._k('products', [p.product_id for p in products])
     return rv.document, 200, []
 

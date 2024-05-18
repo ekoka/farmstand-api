@@ -48,7 +48,6 @@ class Mailer:
 
 
 class Gmail(Mailer):
-
     SERVER = 'smtp.gmail.com'
     PORT = 587
     Connection = smtplib.SMTP
@@ -57,14 +56,22 @@ class Gmail(Mailer):
         conn.starttls()
 
 
+class Fastmail(Mailer):
+    SERVER = 'smtp.fastmail.com'
+    PORT = 465
+    Connection = smtplib.SMTP_SSL
+
+
 class Zoho(Mailer):
     SERVER = 'smtp.zoho.com'
     PORT = 465
     Connection = smtplib.SMTP_SSL
+
 
 def select(mailer):
     if mailer.lower()=='zoho':
         return Zoho
     if mailer.lower()=='gmail':
         return Gmail
-
+    if mailer.lower()=='fastmail':
+        return Fastmail

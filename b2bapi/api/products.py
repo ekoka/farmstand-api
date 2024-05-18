@@ -204,7 +204,7 @@ def get_products(params, domain, lang):
     product_url = api_url('api.get_product', product_id='{product_id}')
     rv = hal()
     rv._l('self', api_url('api.get_products', **params))
-    rv._l('producelist:product', product_url, unquote=True, templated=True)
+    rv._l(f'{app.config.API_NAMESPACE}:product', product_url, unquote=True, templated=True)
     rv._k('product_ids', result['product_ids'])
     rv._k('last_product', result['last_product'])
     rv._k('has_more', result['has_more'])

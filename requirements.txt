@@ -1,0 +1,21 @@
+APScheduler==3.10.4
+bcrypt==4.0.1
+dramatiq==1.14.2
+Flask==2.3.3
+Flask-SQLAlchemy==3.1.1
+#google-auth==2.23.2
+gunicorn==21.2.0
+libthumbor==2.0.2
+Pillow==10.0.1
+psycopg2==2.9.8
+PyJWT==2.8.0
+pytz==2023.3.post1
+redis==5.0.1
+requests==2.31.0
+simplejson==3.19.1
+slugify==0.0.1
+SQLAlchemy==2.0.21
+stripe==6.6.0
+tzlocal==5.0.1
+vino @ git+https://github.com/ekoka/vino@release
+Werkzeug==2.3.7

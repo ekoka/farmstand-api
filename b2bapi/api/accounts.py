@@ -22,7 +22,7 @@ def generate_key(length=24):
 
 """
 - an access key can only be created by providing an authentication token.
-- Producelist only authenticate verified emails, except during registration,
+- The API only authenticate verified emails, except during registration,
 where it provides a temporary token that may not be verified.
 - but that token is restricted to creating a new account.
 - not accessing existing ones.
@@ -39,7 +39,7 @@ def _verify_password_token(data):
 def post_id_token(data):
     """
     ID Token is the token provided during registration by either the OAuth
-    authority or by Producelist (for email auth, or password auth).
+    authority or by the API (for email auth, or password auth).
     """
     token_data = _verify_auth_token(data)
     if not token_data:
@@ -58,14 +58,13 @@ def post_id_token(data):
     db.session.flush()
     rv = hal()
     rv._l('self', api_url('api.post_id_token'))
-    rv._l('producelist:account', api_url(
+    rv._l(f'{app.config.API_NAMESPACE}:account', api_url(
         'api.get_account', account_id=account.account_id))
     rv._k('token', account.id_token)
     return rv.document, 200, []
 
-
 def generate_token(payload):
-    signature = app.config['SECRET_KEY']
+    signature = app.config.SECRET_KEY
     algorithm = 'HS256'
     exp = 3600 # in seconds
     payload.setdefault('exp', datetime.utcnow() + timedelta(seconds=exp))
@@ -119,7 +118,7 @@ def get_profile(access_token):
     """
     rv = hal()
     rv._l('self', api_url('api.get_profile'))
-    rv._l('producelist:account', api_url(
+    rv._l(f'{app.config.API_NAMESPACE}:account', api_url(
         'api.get_account', account_id=access_token['account_id']))
     rv._k('account_id', access_token['account_id'])
     return rv.document, 200, []
@@ -148,7 +147,7 @@ def post_account(data):
             token_data = _verify_google_token(token)
             # next normalize data to fit the rest of the flow
             token_data = val.new_account_via_google.validate(token_data)
-        if provider=='producelist':
+        if provider==app.config.PROJECT_NAME:
             # validate + normalize
             token_data = val.new_account_via_email.validate(token)
             #token_data = _get_email_registration_data(token)
@@ -163,7 +162,7 @@ def post_account(data):
         json_abort(409, {'error': 'Account already exists'})
     rv = hal()
     rv._l('location', api_url('api.get_account', account_id=account.account_id))
-    rv._l('producelist:access_token', api_url('api.post_access_token'))
+    rv._l(f'{app.config.API_NAMESPACE}:access_token', api_url('api.post_access_token'))
     return rv.document, 201, []
 
 
@@ -206,7 +205,7 @@ def _verify_auth_token(data):
     if not provider:
         json_abort(400, {'error': 'Missing authentication provider'})
     rv = None
-    if provider=='producelist':
+    if provider==app.config.PROJECT_NAME:
         verify_fnc = _verify_password_token if 'password' in token else _verify_email_token
         rv = verify_fnc(token)
     return rv or json_abort(401, {'error': 'Not authorized (invalid token)'})

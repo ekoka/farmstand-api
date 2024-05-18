@@ -4,6 +4,7 @@ from ..utils import mailer
 
 from .utils import env, get_upper_keys
 
+PROJECT_NAME = env.string('PROJECT_NAME')
 # path configs currently not used
 CONFIG_PATH = os.path.dirname(os.path.realpath(__file__))
 APP_PATH = os.path.dirname(CONFIG_PATH)
@@ -26,8 +27,8 @@ AVAILABLE_LANGS = env.json('AVAILABLE_LANGS')   # ['en', 'fr']
 #BABEL_TRANSLATION_DIRECTORIES = 'translations'
 
 # TODO: put in environment
-API_NAMESPACE = 'producelist'
-API_DOC_URL = 'http://api.producelist.dev:8989/doc/{rel}'
+API_NAMESPACE = env.string('API_NAMESPACE')
+API_DOC_URL = env.string('API_DOC_URL')
 
 # logging: start with slash for absolute path, otherwise it's relative to
 # the project
@@ -53,9 +54,11 @@ SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://{user}:{password}@{host}/{dbnam
 COMMON_WORDS_FILE = os.path.join(DATA_FILES, 'common_words.json')
 RESERVED_WORDS_FILE = os.path.join(DATA_FILES, 'reserved_words.json')
 
+REDIS_HOST = env.string('REDIS_HOST')
+
 # Flask development server's config
-FLASK_HTTP_HOST = env.string('FLASK_HTTP_HOST') #'api.producelist.local'
-FLASK_HTTP_PORT = env.num('FLASK_HTTP_PORT')    #8989
+FLASK_HTTP_HOST = env.string('FLASK_HTTP_HOST')
+FLASK_HTTP_PORT = env.num('FLASK_HTTP_PORT')
 
 INIT_CALLBACKS = env.json('INIT_CALLBACKS')
 
@@ -63,8 +66,8 @@ SERVER_DOMAIN = env.string('SERVER_DOMAIN')
 
 # used in root resources
 API_HOST = env.string('API_HOST')
-SUBDOMAIN_HOST_TEMPLATE = env.string('SUBDOMAIN_HOST_TEMPLATE')#'http://{domain}.producelist.local:8082 '
-ACCOUNT_HOST = env.string('ACCOUNT_HOST') #'http://producelist.local:8081'
+SUBDOMAIN_HOST_TEMPLATE = env.string('SUBDOMAIN_HOST_TEMPLATE')
+ACCOUNT_HOST = env.string('ACCOUNT_HOST')
 
 DEV_MODE = env.boolean('DEV_MODE')
 DEBUG = env.boolean('DEBUG')

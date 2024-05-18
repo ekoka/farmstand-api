@@ -20,10 +20,9 @@ from .validation import images as validators
 def post_source_image(domain, image=None):
     # TODO: move this initialization inside POSTing of SourceImage
     source_file = image[0]
-    config = app.config['IMAGE']
+    config = app.config.IMAGE
     try:
-        source_image = ImageUtil(
-            source_file, config=config, context='source')
+        source_image = ImageUtil(source_file, config, context='source')
         image_id = source_image.blob_signature
         try:
             srcimg_record = _get_source_image(image_id, domain.domain_id)
@@ -38,21 +37,16 @@ def post_source_image(domain, image=None):
             srcimg_record = SourceImage(
                 source_image_id=image_id,
                 domain_id=domain.domain_id,
-                meta=get_image_data(source_image),
-            )
-
+                meta=get_image_data(source_image), )
             # generate the main copy
-            main_copy = source_image.thumbnail(config['WEB_MAX_LENGTH'],
-                                            context='web')
+            main_copy = source_image.thumbnail(config['WEB_MAX_LENGTH'], context='web')
             main_copy.save()
             main_base = BaseImage(
                 domain_id = domain.domain_id,
                 base_image_id = main_copy.blob_signature,
                 meta = get_image_data(main_copy),
-                source=srcimg_record,
-            )
+                source=srcimg_record, )
             set_aspect_ratios(main_base)
-
             db.session.add(srcimg_record)
             db.session.flush()
     except (IOError, TypeError) as e:
@@ -60,7 +54,6 @@ def post_source_image(domain, image=None):
         raise
         #TODO: more elaborate message
         json_abort(405, {})
-
     rv = hal()
     rv._k('source_image_id', image_id)
     #rv._l('source_image', api_url('api.get_source_image', image_id=image_id))

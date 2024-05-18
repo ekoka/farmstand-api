@@ -4,12 +4,12 @@ class Resource:
 
     def __init__(self, hal_or_document=None):
         if hal_or_document is None:
-            document = {}
-        else:
-            try:
-                document = hal_or_document.document
-            except AttributeError as e:
-                document = hal_or_document
+            self.document = {}
+            return
+        try:
+            document = hal_or_document.document
+        except AttributeError as e:
+            document = hal_or_document
         self.document = document
 
     # links
@@ -27,10 +27,10 @@ class Resource:
         links[name] = link
         return self
 
-    # curies
+    # curies (Compact URIs)
     def _c(self, name, uri, templated=True):
         curie = {
-            'name': name, 
+            'name': name,
             'href': uri,
         }
         if templated:
@@ -49,4 +49,3 @@ class Resource:
 
 if __name__=='__main__':
     r = Resource()
-

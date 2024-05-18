@@ -130,11 +130,8 @@ class ImageUtil:
     validating functions.
     """
 
-    def __init__(self, image_file, config=None, context=None):
-        if config is None:
-            config = self._default_config()
+    def __init__(self, image_file, config, context=None):
         self.config = config
-
         if context is None:
             context = ''
         self.context = context
@@ -242,21 +239,6 @@ class ImageUtil:
                 filepath=self.filepath,
             )
         return self._data
-
-    def _default_config(self):
-        return dict(
-            DUMP = '/tmp/producelist/images',
-            MAX_FILESIZE = 10000000, #10mb
-            ASPECT_RATIO = (0.3333, 3.0),
-            WEB_MAX_LENGTH = 900, # max width/height length
-            SUPPORTED_FORMATS = dict(
-                JPEG='jpg',
-                JPG='jpg',
-                PNG='png',
-                GIF='gif',
-            )
-        )
-
 
     def validate_format(self):
         if not self.image.format in self.config['SUPPORTED_FORMATS']:

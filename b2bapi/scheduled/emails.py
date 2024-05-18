@@ -25,7 +25,6 @@ def send(subject, to, content=None, html_content=None):
                content=content, html_content=html_content,)
     return m.send()
 
-#@dramatiq.actor(actor_name='producelist.send_passcode')
 @dramatiq.actor
 def send_passcode():
     app = dramatiq.flask_app
@@ -48,7 +47,6 @@ def send_passcode():
                 db.session.rollback()
                 raise
 
-#@dramatiq.actor(actor_name='producelist.send_inquiries')
 @dramatiq.actor
 def send_inquiries():
     app = dramatiq.flask_app
@@ -100,7 +98,7 @@ def get_field(record, name, lang):
             else:
                 return f.get('value')
 
-#@dramatiq.actor(actor_name='producelist.send_activation_email')
+#@dramatiq.actor
 #def send_activation_email():
 #    app = dramatiq.flask_app
 #    token_expr = {"tokens": [{"type": "activation_token",
@@ -141,7 +139,7 @@ def get_field(record, name, lang):
 #
 #    return True
 
-#@dramatiq.actor(actor_name='producelist.send_password_reset_email')
+#@dramatiq.actor
 #def send_password_reset_email():
 #    token_expr = {"tokens": [{"type": "reset_token",
 #                              "status": "new"}]}

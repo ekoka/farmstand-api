@@ -182,23 +182,23 @@ def _get_domain_resource(domain, lang):
     rv = hal()._l('self', domain_url)
     rv._k('name', domain.name)
     rv._k('creation_date', domain.creation_date.date())
-    rv._l('producelist:product_schema', product_schema_url)
-    rv._l('producelist:groups', groups_url)
-    rv._l('producelist:domain_accounts', accounts_url)
-    rv._l('producelist:domain_account', account_url, unquote=True,
+    rv._l(f'{app.config.API_NAMESPACE}:product_schema', product_schema_url)
+    rv._l(f'{app.config.API_NAMESPACE}:groups', groups_url)
+    rv._l(f'{app.config.API_NAMESPACE}:domain_accounts', accounts_url)
+    rv._l(f'{app.config.API_NAMESPACE}:domain_account', account_url, unquote=True,
           templated=True)
-    rv._l('producelist:domain_access_requests', access_requests_url)
-    rv._l('producelist:group_resources', group_resources_url)
-    rv._l('producelist:group', group_url, unquote=True, templated=True)
-    rv._l('producelist:products', products_url)
-    rv._l('producelist:source_images', source_images_url)
-    rv._l('producelist:images', images_url)
-    #rv._l('producelist:inquiries', inquiries_url)
-    rv._l('producelist:product', product_url, unquote=True, templated=True)
-    rv._l('producelist:product_json', product_json_url, unquote=True,
+    rv._l(f'{app.config.API_NAMESPACE}:domain_access_requests', access_requests_url)
+    rv._l(f'{app.config.API_NAMESPACE}:group_resources', group_resources_url)
+    rv._l(f'{app.config.API_NAMESPACE}:group', group_url, unquote=True, templated=True)
+    rv._l(f'{app.config.API_NAMESPACE}:products', products_url)
+    rv._l(f'{app.config.API_NAMESPACE}:source_images', source_images_url)
+    rv._l(f'{app.config.API_NAMESPACE}:images', images_url)
+    #rv._l(f'{app.config.API_NAMESPACE}:inquiries', inquiries_url)
+    rv._l(f'{app.config.API_NAMESPACE}:product', product_url, unquote=True, templated=True)
+    rv._l(f'{app.config.API_NAMESPACE}:product_json', product_json_url, unquote=True,
           templated=True)
-    rv._l('producelist:product_details', product_details_url)
-    rv._l('producelist:product_resources', product_resources_url)
+    rv._l(f'{app.config.API_NAMESPACE}:product_details', product_details_url)
+    rv._l(f'{app.config.API_NAMESPACE}:product_resources', product_resources_url)
 
     # include company info
     rv._k('data', delocalize_data(domain.data, Domain.localized_fields, lang))
