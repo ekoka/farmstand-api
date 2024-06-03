@@ -1,4 +1,5 @@
-from b2bapi.config import config
-from b2bapi import make_app
-from b2bapi import scheduled
+from appsrc.config import config
+from appsrc import make_app
+from appsrc import scheduled
+
 app = make_app(config)

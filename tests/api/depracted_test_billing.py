@@ -2,14 +2,12 @@ import pytest
 import requests
 from datetime import datetime as dtm, timedelta
 
-
-from b2bapi.db.models.billing import Plan, Billable, BillablePeriod
-from b2bapi.api.billing import (
+from appsrc.db.models.billing import Plan, Billable, BillablePeriod
+from appsrc.api.billing import (
     billable_monthly_periods,
     period_day_count,
     period_charges,
-    billable_report,
-)
+    billable_report, )
 from ..conftest import cannot_reach_stripe
 
 @pytest.mark.skip('use to dump periods')
@@ -101,4 +99,3 @@ def test_invalid_dates_rejected_on_period():
     # overlapping dates
     # different months
     pass
-

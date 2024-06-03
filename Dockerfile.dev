@@ -8,8 +8,13 @@ RUN python -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --upgrade pip
+RUN pip install --upgrade pip-tools
+WORKDIR /app
+COPY requirements.in .
+COPY requirements.txt requirements.old.txt
+COPY requirements.txt .
+RUN pip-compile requirements.in
 RUN pip install -r requirements.txt
-RUN pip install gunicorn
 
 # second stage
 FROM python:3.8-slim
@@ -19,10 +24,20 @@ RUN apt-get install -y --no-install-recommends less libpq-dev
 #COPY --chown=python:python --from=build /venv /venv
 COPY --from=build /venv /venv
 ENV PATH="/venv/bin:$PATH"
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 WORKDIR /app
+COPY --from=build /app/requirements.old.txt /tmp/requirements.old.txt
+COPY --from=build /app/requirements.txt /tmp/requirements.new.txt
+# Manually run the sync-requirements.py script from the container. If the requirements have
+# changed, it'll update requirements.txt
+
 #RUN mkdir /app && chown python:python /app
 #RUN chown python:python /app
 #USER 999
 #EXPOSE 5000
+# HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 CMD curl -f http://localhost:5000/health
+#CMD ["/app/wsgi.sh"]
+
 # HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 CMD curl -f http://localhost:5000/health
 #CMD ["/app/wsgi.sh"]

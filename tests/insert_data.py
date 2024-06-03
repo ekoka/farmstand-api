@@ -1,11 +1,11 @@
 import pytest
 from datetime import datetime as dtm
 
-from b2bapi.db.models.accounts import Account, AccountAccessKey
-from b2bapi.db.models.billing import Plan, Billable
+from appsrc.db.models.accounts import Account, AccountAccessKey
+from appsrc.db.models.billing import Plan, Billable
 
 @pytest.fixture(scope='session')
-def provider(): 
+def provider():
     return 'simpleb2b'
 
 @pytest.fixture(scope='session')
@@ -17,7 +17,7 @@ def account_data(provider, account_email):
     return [{
         'provider': provider,
         'token': {
-            'email': 'someemail@mymail.com', 
+            'email': 'someemail@mymail.com',
             'first_name': 'John',
             'last_name': 'McGee',
             'lang': 'de',
@@ -25,7 +25,7 @@ def account_data(provider, account_email):
     }, {
         'provider': provider,
         'token': {
-            'email': account_email, 
+            'email': account_email,
             'first_name': 'mike',
             'last_name': 'ekoka',
             'lang': 'sp',
@@ -33,13 +33,13 @@ def account_data(provider, account_email):
     }, {
         'provider': provider,
         'token': {
-            'email': 'michael@sundry.ca', 
+            'email': 'michael@sundry.ca',
             'first_name': 'M.',
             'last_name': 'Penda',
             'lang': 'en',
         }
     },]
-    
+
 @pytest.fixture(scope='session')
 def pricing_plans():
     return [
@@ -110,7 +110,7 @@ def load_accounts(app, db_load_table):
     Depends:    []
     Loads:      [accounts, account_access_keys, account_emails]
     """
-    def load(connection): 
+    def load(connection):
         db_load_table(connection, table='accounts')
         db_load_table(connection, table='account_emails')
         db_load_table(connection, table='account_access_keys')
@@ -151,7 +151,7 @@ def access_key_finder():
         if email:
             return query.filter_by(account_id=acc.account_id).first()
         return query.all()
-    return getfinder 
+    return getfinder
 
 @pytest.fixture(scope='session')
 def auth_headers(access_key_finder):
@@ -166,7 +166,7 @@ def auth_headers(access_key_finder):
 def dump_pricing(pricing_plans, db_dump_table):
     """
     Depends:    []
-    Dumps:      [plans] 
+    Dumps:      [plans]
     """
     def dump(session):
         # NOTE: there's no API endpoint for pricing plans yet, so let's use
@@ -180,7 +180,7 @@ def dump_pricing(pricing_plans, db_dump_table):
 def load_pricing(db_load_table):
     """
     Depends:    []
-    Loads:      [plans] 
+    Loads:      [plans]
     """
     def load(connection):
         db_load_table(connection, 'plans')
@@ -188,7 +188,7 @@ def load_pricing(db_load_table):
 
 @pytest.fixture(scope='session')
 def dump_domains(
-    load_pricing, load_signins, db_dump_table, api_client, domain_data, 
+    load_pricing, load_signins, db_dump_table, api_client, domain_data,
     auth_headers):
     """
     Depends:    [accounts, account_access_keys, account_emails, signins, plans]
@@ -234,7 +234,7 @@ def load_common_words(db_load_table):
     Depends:    []
     Loads:      [common_words]
     """
-    def load(connection): 
+    def load(connection):
         db_load_table(connection, table='common_words')
     return load
 

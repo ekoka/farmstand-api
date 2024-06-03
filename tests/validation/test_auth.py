@@ -2,9 +2,9 @@ import pytest
 from vino.api.schema import obj, arr, prim
 from vino.processors import validating as vld
 from vino import errors as vno_err
-from b2bapi.api.validation.accounts import (
+from appsrc.api.validation.accounts import (
     password_check, new_account_via_google, new_account_via_email)
-from b2bapi.db.models.accounts import Account
+from appsrc.db.models.accounts import Account
 
 
 @pytest.fixture
@@ -82,36 +82,36 @@ def test_repeated_char_sequence_rejected(datachecker):
 
 def test_google_account_data_normalized():
     data = {
-        'email': 'abc@def', 
+        'email': 'abc@def',
         'email_verified': True,
-        'given_name': 'abc', 
-        'family_name': 'def', 
-        'password': '982kd2o29d8', 
+        'given_name': 'abc',
+        'family_name': 'def',
+        'password': '982kd2o29d8',
         'locale': 'fr',
-    } 
+    }
     result = new_account_via_google.validate(data)
     assert 'given_name' not in result and result['first_name']==data[
-        'given_name'] 
+        'given_name']
     assert 'email_verified' not in result and result['confirmed']==data[
-        'email_verified'] 
+        'email_verified']
     assert 'locale' not in result and result['lang']==data[
-        'locale'] 
+        'locale']
     assert 'password' not in result
 
 
 def test_email_account_data_normalized(app): # test needs context for password validation
     data = {
-        'email': 'abc@def', 
+        'email': 'abc@def',
         'confirmed': True,
         'email_verified': True,
-        'given_name': 'abc', 
-        'first_name': 'abc', 
-        'last_name': 'def', 
+        'given_name': 'abc',
+        'first_name': 'abc',
+        'last_name': 'def',
         # context is needed for common_words check
-        'password': '982kd2o29d8', 
+        'password': '982kd2o29d8',
         'lang': 'fr',
-    } 
-    result = new_account_via_email.validate(data) 
+    }
+    result = new_account_via_email.validate(data)
     assert result['email']==data['email']
     assert result['confirmed']==False
     assert 'email_verified' not in result

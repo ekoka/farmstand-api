@@ -2,8 +2,8 @@
 Testing `domains` and catalogs.
 """
 import pytest
-from b2bapi.db.models.billing import Plan
-from b2bapi.db.models.domains import Domain
+from appsrc.db.models.billing import Plan
+from appsrc.db.models.domains import Domain
 
 @pytest.mark.skip('use to dump domains from db')
 def test_dump_domains(dump_domains, account_email, nested_session):
@@ -25,7 +25,7 @@ def test_can_check_domain_name_already_exists(
     response = api_client.get(
         '/api/v1/domain-name-check', query_string=query_string)
     assert response.status_code==200
-    
+
 
 def test_can_check_domain_name_does_not_exist(
     load_signins, nested_session, api_client, jsloads):
@@ -50,7 +50,7 @@ def test_can_check_domain_name_is_reserved(
 def test_can_post_domain_with_plan_id(
     load_pricing, load_signins, nested_session, api_client, auth_headers,
     jsloads, account_email):
-    conn = nested_session.connection() 
+    conn = nested_session.connection()
     load_pricing(conn)
     load_signins(conn)
     plan = nested_session.query(Plan).first()
@@ -78,7 +78,7 @@ def test_can_post_domain_with_plan_id(
 def test_can_post_domain_with_plan_name(
     load_pricing, load_signins, nested_session, api_client, auth_headers,
     jsloads, domain_data, account_email):
-    conn = nested_session.connection() 
+    conn = nested_session.connection()
     load_pricing(conn)
     load_signins(conn)
     plan = nested_session.query(Plan).first()

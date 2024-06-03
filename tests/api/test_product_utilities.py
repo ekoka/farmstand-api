@@ -1,7 +1,7 @@
 import pytest
-from b2bapi.api.product_utils import (
+from appsrc.api.product_utils import (
     _localize_fields, appendobj, patch_record, Mismatch)
-from b2bapi.db.models.meta import Field
+from appsrc.db.models.meta import Field
 
 def test_text_fields_are_localized():
     val1 = 'val1'
@@ -11,7 +11,7 @@ def test_text_fields_are_localized():
             'data': {
                 'fields': [
                     {'value': val1, 'field_type': ft},
-                    {'value': val2, 'field_type': ft}, 
+                    {'value': val2, 'field_type': ft},
                 ]
             }
         }
@@ -29,7 +29,7 @@ def test_only_text_fields_are_localized():
             'data': {
                 'fields': [
                     {'value': val1, 'field_type': 'BOOL'},
-                    {'value': val2, 'field_type': 'MULTI_CHOICE'}, 
+                    {'value': val2, 'field_type': 'MULTI_CHOICE'},
                     {'value': val3, 'field_type': 'text'},
                 ]
             }
@@ -54,11 +54,11 @@ def test_appendobj_appends_to_proper_location_with_keymap(cls):
         {'value': [{}, {}]}
     ]}
     obj = cls(data=data, visible=True, product_id=883)
-        
+
     keymap = ['data', 'fields', 0, 'value']
     foo = {'value': 'abc'}
-    appendobj(obj, keymap, foo) 
-    assert obj.data['fields'][0]['value'][-1] is foo 
+    appendobj(obj, keymap, foo)
+    assert obj.data['fields'][0]['value'][-1] is foo
 
 def test_patch_record_can_set_field_value(cls):
     obj = cls(field1=True, field2='abc', field3='foo')
@@ -71,7 +71,7 @@ def test_patch_record_can_set_field_value(cls):
     assert obj.field1==data['field1']
     assert obj.field2==data['field2']
     assert obj.field3==data['field3']
-    
+
 
 def test_patch_record_raises_Mismatch_error_on_non_existing_value(cls):
     obj = cls(field1=True, field2='abc', field3='foo')
@@ -113,12 +113,12 @@ def test_patch_record_can_set_inner_value_in_dict(cls):
 
 def test_patch_record_can_set_data_in_list_of_named_dict(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={'list': [
             {'name': 'dict1', 'key': 'value1'},
             {'name': 'dict2', 'key': 'value2'},
             {'name': 'dict3', 'key': 'value3'},
-        ]}, 
+        ]},
         field3='foo'
     )
     data = {
@@ -133,12 +133,12 @@ def test_patch_record_can_set_data_in_list_of_named_dict(cls):
 
 def test_change_in_list_of_named_dict_only_affects_specified_names(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={'list': [
             {'name': 'dict1', 'key': 'value1'},
             {'name': 'dict2', 'key': 'value2'},
             {'name': 'dict3', 'key': 'value3'},
-        ]}, 
+        ]},
         field3='foo'
     )
     data = {
@@ -152,12 +152,12 @@ def test_change_in_list_of_named_dict_only_affects_specified_names(cls):
 
 def test_change_to_named_dict_affects_only_changed_attributes(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={'list': [
             {'name': 'dict1', 'key': 'value1', 'alpha': 'tango'},
             {'name': 'dict2', 'key': 'value2', 'papa': 'charlie'},
             {'name': 'dict3', 'key': 'value3'},
-        ]}, 
+        ]},
         field3='foo'
     )
     data = {
@@ -172,10 +172,10 @@ def test_change_to_named_dict_affects_only_changed_attributes(cls):
 
 def test_new_key_is_added_to_named_dict(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={'list': [
             {'name': 'dict1', 'key': 'value1', 'alpha': 'tango'},
-        ]}, 
+        ]},
         field3='foo'
     )
     data = {
@@ -190,11 +190,11 @@ def test_new_key_is_added_to_named_dict(cls):
 
 def test_new_object_appended_to_dict_list_if_name_not_found(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={'list': [
             {'name': 'dict1', 'key': 'value1', 'alpha': 'tango'},
             {'name': 'dict2', 'key': 'value2', 'beta': 'zeta'},
-        ]}, 
+        ]},
         field3='foo'
     )
     data = {
@@ -207,11 +207,11 @@ def test_new_object_appended_to_dict_list_if_name_not_found(cls):
 
 def test_missing_name_field_raises_error_for_list_of_dicts(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={
             'outer': {'inner': 'bar', 'list': None},
-        }, 
-        field3={'outer': {'inner': []}}, 
+        },
+        field3={'outer': {'inner': []}},
         field4='abc',
         field5='xyz',
     )
@@ -226,7 +226,7 @@ def test_missing_name_field_raises_error_for_list_of_dicts(cls):
 
 def  test_dict_cannot_be_part_of_items_in_ordinary_list(cls):
     obj = cls(
-        field3={'outer': {'inner': []}}, 
+        field3={'outer': {'inner': []}},
     )
     l = ['a', 'b', {'value': 'baz'}]
     data = {
@@ -239,11 +239,11 @@ def  test_dict_cannot_be_part_of_items_in_ordinary_list(cls):
 
 def test_ordinary_items_cannot_be_part_of_items_in_dict_list(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={
             'outer': {'inner': 'bar', 'list': None},
-        }, 
-        field3={'outer': {'inner': []}}, 
+        },
+        field3={'outer': {'inner': []}},
         field4='abc',
         field5='xyz',
     )
@@ -259,7 +259,7 @@ def test_ordinary_items_cannot_be_part_of_items_in_dict_list(cls):
 def test_list_of_ordinary_values_set_as_values(cls):
     ordinary_list = list('abcde')
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={'list': None, 'foo': 'bar'},
         field3='foo'
     )
@@ -273,7 +273,7 @@ def test_list_of_ordinary_values_set_as_values(cls):
 def test_nested_lists_are_treated_as_ordinary_values(cls):
     ordinary_list = ['a', 'c', 'd', list('sdfds')]
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={'list': None, 'foo': 'bar'},
         field3='foo'
     )
@@ -287,14 +287,14 @@ def test_nested_lists_are_treated_as_ordinary_values(cls):
 
 def test_patch_record_doesnt_mess_with_unmodified_data(cls):
     obj = cls(
-        field1=True, 
+        field1=True,
         field2={
             'outer': {'inner': 'bar', 'list': None},
-        }, 
+        },
         field3={'outer': {'inner': [
             {'name': 'n1', 'value': 'foo'},
             {'name': 'n2', 'value': 'bar'},
-        ]}}, 
+        ]}},
         field4='abc',
         field5='xyz',
     )

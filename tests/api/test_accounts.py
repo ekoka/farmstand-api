@@ -3,7 +3,7 @@ import json
 from urllib import parse
 import stripe
 
-from b2bapi.db.models.accounts import Account, AccountAccessKey, Signin
+from appsrc.db.models.accounts import Account, AccountAccessKey, Signin
 from ..conftest import cannot_reach_stripe
 
 @pytest.mark.skipif(cannot_reach_stripe(), reason='Could not reach stripe')

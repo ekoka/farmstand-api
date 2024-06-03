@@ -9,16 +9,16 @@ from  collections import namedtuple
 import pytest
 import requests
 
-from b2bapi.config import test_config as app_config
+from appsrc.config import test_config as app_config
 
-from b2bapi import (make_app, db as _db)
-from b2bapi.utils.serialize import json_serialize
-import b2bapi.utils.randomstr
+from appsrc import (make_app, db as _db)
+from appsrc.utils.serialize import json_serialize
+import appsrc.utils.randomstr
 
 # ensuring that we're only testing from a test database
 dbname = app_config.secrets.DB_NAME
 app_config.KEEP_TEST_DATABASE = True
-assert dbname.startswith('test_') or dbname.endswith('_test') 
+assert dbname.startswith('test_') or dbname.endswith('_test')
 
 def cannot_reach_stripe():
     if getattr(cannot_reach_stripe, 'rv', None) is not None:
@@ -52,12 +52,12 @@ def app(db):
 
 
         #db.session.add(Domain(name=, [
-        #    {'name': 'domain1'}, {'name': 'domain2'}, {'name': 'domain3'}, 
+        #    {'name': 'domain1'}, {'name': 'domain2'}, {'name': 'domain3'},
         #    {'name': 'domain4'}])
         #db.session.commit()
-        # we yield outside the AppContext because keeping it open creates some 
+        # we yield outside the AppContext because keeping it open creates some
         # issues when counting AppContext objects later and it affects the call to
-        # do_teardown_appcontext() which in turn is where the db session is 
+        # do_teardown_appcontext() which in turn is where the db session is
         # registerd for removal.
         yield _app
         # if we want to keep the data we need to commit before closing
@@ -92,7 +92,7 @@ def client(app):
 @pytest.fixture(scope='session')
 def base_url(app):
     return 'https://{server_domain}:{port}'.format(
-        server_domain=app.config['SERVER_DOMAIN'], 
+        server_domain=app.config['SERVER_DOMAIN'],
         port=app.config['HTTP_PORT'],
     )
 
@@ -111,15 +111,15 @@ def api_client(client, base_url, logger):
     def req(*a, **kw):
         # args as a list as opposed to a tuple
         a = list(a)
-        # path is either specified in kw arg or it's the first item in the 
+        # path is either specified in kw arg or it's the first item in the
         # args list.
         path = kw.setdefault('path', a.pop(0))
-        # method is specified in kw args 
+        # method is specified in kw args
         method = kw.pop('method', 'get')
-        # if the base_url is already part of the path, ignore its duplicate 
+        # if the base_url is already part of the path, ignore its duplicate
         # setting on the client.
         if base_url not in path:
-            kw.setdefault('base_url', base_url) 
+            kw.setdefault('base_url', base_url)
         action = getattr(client, method)
         # if data is being submitted it's in json format.
         # set headers to mark this.
@@ -153,7 +153,7 @@ def nested_session(app, db):
     # of which is to provide a virtual environment for your code to interact
     # with and then to roll back all the changes, leaving the database in its
     # initial state.
-    # 
+    #
     # One more thing to note is that this is not a `SessionTransaction`, which
     # are a logical emulation of the "transaction" concept, a specific
     # capability of SQLAlchemy. `SessionTransactions` are used and managed by
@@ -170,8 +170,8 @@ def nested_session(app, db):
     test_is_running = True
 
     """
-    This function creates a `scoped_session` and binds it to the `Connection` we previously isolated from the engine. It then ties that session to the global db (`SQLAlchemy` object from 
-    Flask-SQLAlchemy) such that when invoking `db.session` we'll 
+    This function creates a `scoped_session` and binds it to the `Connection` we previously isolated from the engine. It then ties that session to the global db (`SQLAlchemy` object from
+    Flask-SQLAlchemy) such that when invoking `db.session` we'll
     """
     def create_nested_session():
         from sqlalchemy import event
@@ -242,11 +242,11 @@ def db_load_table(data_fixture_path):
         with open(os.path.join(table_csv)) as f:
             #cursor.copy_from(file=f, table='accounts',sep=',')
             cursor.copy_expert(sql, file=f)
-            # because we're operating on the direct db connection 
+            # because we're operating on the direct db connection
         if sequence:
             connection.execute(sequence_stmt.format(table=table, **sequence))
         transaction.commit()
-    return load 
+    return load
 
 @pytest.fixture(scope='session')
 def db_dump_table(data_fixture_path):
@@ -265,8 +265,8 @@ def db_dump_table(data_fixture_path):
         with open(os.path.join(table_csv), 'w') as f:
             #cursor.copy_from(file=f, table='accounts',sep=',')
             cursor.copy_expert(sql.format(table=table), file=f)
-            # because we're operating on the direct db connection 
+            # because we're operating on the direct db connection
             #transaction.commit()
     return dump
 
-from .insert_data import * 
+from .insert_data import *

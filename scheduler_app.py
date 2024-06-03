@@ -1,6 +1,7 @@
-from b2bapi import make_app
-from b2bapi.config import config
-from b2bapi.scheduled import Cron, emails
+from appsrc import make_app
+from appsrc.config import config
+from appsrc.scheduled import Cron, emails
+
 app = make_app(config)
 
 if __name__=='__main__':

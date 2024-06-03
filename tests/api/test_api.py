@@ -1,4 +1,4 @@
-import b2bapi.api
+import appsrc.api
 import pytest
 
 def test_can_connect_to_api(api_client, json, logger):
