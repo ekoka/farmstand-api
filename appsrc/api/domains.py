@@ -1,114 +1,28 @@
-from datetime import datetime as dtm, timedelta
-from flask import current_app as app, g
-from sqlalchemy.orm import exc as orm_exc
-from sqlalchemy import exc as sql_exc
-from vino import errors as vno_err
-
-from ..db.models.domains import Domain, DomainAccount, DomainAccessRequest
-from ..db.models.accounts import Account
-from ..db.models.billing import Plan
-from ..db import db
-from ..db.models.reserved_words import reserved_words
+from .routes.routing import api_url, hal
+from .utils import delocalize_data, run_or_abort
+from ..db.models.domains import Domain
 from ..utils.uuid import clean_uuid
-from .routes.routing import api_url, json_abort, hal
-from .utils import localize_data, delocalize_data, StripeContext
-from .accounts import _get_account
-
-def _get_plan(plan_id):
-    try:
-        return Plan.query.filter_by(plan_id=plan_id).one()
-    except orm_exc.NoResultFound as e:
-        json_abort(404, {'error': 'Plan not found'})
+from ..service import domains as domain_srv
 
 # the expects_access_token directive also implies authenticate
 def post_domain(data, access_token, lang):
-    account = _get_account(access_token['account_id'])
-    # TODO: validation
-    try:
-        name = data.pop('name')
-    except KeyError:
-        json_abort(400, {'error':'Missing catalog identifier'})
-
-    plan = _get_plan(plan_id=data.pop('plan_id', None))
-
-    if not account.stripe_customer_id:
-        json_abort(403, {'error': 'Account does not have a linked Stripe '
-                         'account'})
-
-    trial_period_days = 30
-    trial_end_date = dtm.utcnow() + timedelta(days=trial_period_days)
-    month_after_trial = trial_end_date.replace(day=28) + timedelta(days=4)
-    #next_month = dtm.now().replace(day=28) + timedelta(days=4)
-    billing_cycle_anchor = int(month_after_trial.replace(day=1).timestamp())
-
-    with StripeContext() as ctx:
-
-        def duplicate_nicknames(*a,**kw):
-            json_abort(409, {'error': 'The chosen catalog nickname '
-                             'is already taken, try a different one.'})
-        ctx.register_handler(
-            error_type=sql_exc.IntegrityError,
-            handler=duplicate_nicknames
-        )
-
-        # name the domain
-        domain = Domain(name=name)
-        # link to account
-        domain.owner = account
-        # set plan
-        domain.plan = plan
-        # activate
-        domain.active = True
-        db.session.add(domain)
-        # add detailed information
-        if data.get('data'):
-            domain.data = localize_data(
-                data['data'], Domain.localized_fields, lang)
-        domain.meta = data.get('meta') or Domain.default_meta()
-        db.session.flush()
-
-        # stripe's metadata
-        metadata = {
-            'domain_id': domain.domain_id,
-            'domain_nickname': domain.name,
-        }
-
-        # if everything went well, start the meter
-
-        # subscribe customer to plan on stripe
-        subscription = ctx.stripe.Subscription.create(
-            customer=account.stripe_customer_id,
-            items=[{'plan': plan.plan_id}],
-            trial_period_days=trial_period_days,
-            billing_cycle_anchor=billing_cycle_anchor,
-            metadata=metadata,
-        )
-
-        # link stripe data to local billable
-        domain.subscription_id = subscription.id
-        domain.subscription_data = subscription
-
-        # also add a domain_accounts record for owner
-        da = _set_domain_account(
-            domain_id=domain.domain_id, account_id=account.account_id)
-        da.role = 'admin'
-        da.active = True
-
-        db.session.flush()
-
+    # api
+    #TODO: Validation
+    fnc = lambda: domain_srv.create_domain(data, access_token, lang)
+    domain = run_or_abort(fnc)
     rv = hal()
-
     domain_url = api_url('api.get_domain', domain_name=domain.name)
     rv._l('location', domain_url)
     rv._k('domain_name', domain.name)
     return rv.document, 201, [('Location', domain_url)]
 
 def _subscription_data(subscription):
+    # api - data template
     #TODO
     #"current_period_start": 1552054799,
     #"current_period_end": 1554733199,
     #"status": "active",
-    rv = {
+    return {
         "id": "sub_Ef3fWeFTQIbqr5",
         "billing_cycle_anchor": 1552054799,
         "canceled_at": null,
@@ -131,31 +45,24 @@ def _subscription_data(subscription):
             "interval_count": 1,
             "nickname": null,
             "product": "prod_BTMywD3UV6AkeY",
-            "trial_period_days": null,
-        },
-    }
+            "trial_period_days": null, }, }
 
-    return rv
-
-
-# we only need to authenticate since the domain list is matched against the
+# We only need to authenticate since the domain list is matched against the
 # authenticated account anyways
 def get_domains(access_token, lang):
-    account = _get_account(access_token['account_id'])
+    # api
+    fnc = lambda: domain_srv.get_domains(access_token, lang)
+    (account, roles) = run_or_abort(fnc)
+    domains = [_get_domain_resource(account_domain.domain, lang)
+               for account_domain in account.domains]
     rv = hal()
     rv._l('self', api_url('api.get_domains'))
-
-    domains = []
-    roles = {}
-    for account_domain in account.domains:
-        domain = account_domain.domain
-        domains.append(_get_domain_resource(domain, lang))
-        roles[domain.name] = account_domain.role
     rv._embed('domains', domains)
     rv._k('roles', roles)
     return rv.document, 200, []
 
 def _get_domain_resource(domain, lang):
+    # api - resource
     domain_url = api_url('api.get_domain', domain_name=domain.name)
     product_schema_url = api_url('api.get_product_schema', domain=domain.name)
     groups_url = api_url('api.get_groups', domain=domain.name)
@@ -199,113 +106,66 @@ def _get_domain_resource(domain, lang):
           templated=True)
     rv._l(f'{app.config.API_NAMESPACE}:product_details', product_details_url)
     rv._l(f'{app.config.API_NAMESPACE}:product_resources', product_resources_url)
-
     # include company info
     rv._k('data', delocalize_data(domain.data, Domain.localized_fields, lang))
     rv._k('meta', domain.meta)
     return rv.document
 
-def _get_domain(domain_name):
-    try:
-        return Domain.query.filter_by(name=domain_name).one()
-    except orm_exc.NoResultFound as e:
-        json_abort(404, {'error_code': 404, 'error': 'Domain not found'})
-
 def get_domain(domain_name, lang):
-    domain = _get_domain(domain_name=domain_name)
+    # api
+    fnc = lambda: domain_srv.get_domain(domain_name)
+    domain = run_or_abort(fnc)
     return _get_domain_resource(domain, lang), 200, []
 
-
 def put_domain(domain_name, data, lang):
+    # api
     # TODO: validation
-    domain = _get_domain(domain_name=domain_name)
-
-    # changing localized data
-    domain.data = localize_data(
-        data.get('data', {}), Domain.localized_fields, lang)
-
-    # changing metadata
-    domain.meta = data.get('meta', {})
-
-    try:
-        # only change domain's active state if explicitly set in posted data
-        if data['active'] in [True, False]:
-            domain.active = data['active']
-    except KeyError:
-        pass
-
-    db.session.flush()
+    fnc = lambda: domain_srv.update_domain(domain_name, data, lang)
+    run_or_abort(fnc)
     return {}, 200, []
 
 def get_domain_name_check(params):
+    # api
     name = params.get('q')
-    if name in reserved_words:
-        return {}, 403, []
     try:
-        domain = Domain.query.filter(Domain.name==name).one()
+        domain_srv.check_domain_name(name)
         return {}, 200, []
-    except orm_exc.NoResultFound as e:
-        return {}, 404, []
-
-def _get_domain_account(domain_id, account_id):
-    return DomainAccount.query.filter_by(
-        domain_id=domain_id, account_id=account_id).one()
-
-def _set_domain_account(domain_id, account_id):
-    try:
-        return _get_domain_account(domain_id, account_id)
-    except orm_exc.NoResultFound:
-        rv = DomainAccount(domain_id=domain_id, account_id=account_id)
-        db.session.add(rv)
-        db.session.flush()
-        return rv
-
+    except srv_err.ServiceError as e:
+        return {}, e.code, []
 
 def post_domain_account(data, domain):
+    # api
     # TODO validation
     # TODO: add a routine for user to approve the domain they're being added to
-    try:
-        da = _set_domain_account(
-            domain_id=domain.domain_id, account_id=data['account_id'])
-        da.active = True
-        da.role = data.get('role', 'user')
-        db.session.flush()
-    except:
-        raise
-        db.session.rollback()
-        json_abort(400, {'error': 'Could not add account.'})
+    fnc = lambda: domain_srv.create_domain_account(data, domain)
+    run_or_abort(fnc)
     return {}, 200, []
 
 def delete_domain_account(account_id, domain):
-    try:
-        da = _get_domain_account(
-            domain_id=domain.domain_id, account_id=account_id)
-        da.active = False
-    except orm_exc.NoResultFound:
-        db.session.rollback()
+    # api
+    fnc = lambda: domain_srv.delete_domain_account(account_id, domain)
+    run_or_abort(fnc)
     return {}, 200, []
 
 def get_domain_accounts(domain, params):
-    q = DomainAccount.query.filter_by(domain_id=domain.domain_id)
-    if params.get('active'):
-        q = q.filter_by(active=params['active'])
-    accounts = q.all()
+    # api
+    fnc = lambda: domain_srv.get_domain_accounts(domain, params.get('active'))
+    accounts = run_or_abort(fnc)
     rv = hal()
     rv._l('self', api_url('api.get_domain_accounts'))
     rv._embed('accounts', [_get_domain_account_resource(a) for a in accounts])
-
     return rv.document, 200, []
 
 def get_domain_account(domain, account_id):
-    try:
-        account = _get_domain_account(
-            domain_id=domain.domain_id, account_id=account_id)
-        rv = _get_domain_account_resource(account)
-        return rv, 200, []
-    except orm.NoResultFound:
-        json_abort(404, {'error': 'Account not found'})
+    # api
+    fnc = lambda: domain_srv.get_domain_account(
+        domain_id=domain.domain_id, account_id=account_id)
+    account = run_or_abort(fnc)
+    rv = get_domain_account_resource(account)
+    return rv, 200, []
 
-def _get_domain_account_resource(domain_account):
+def get_domain_account_resource(domain_account):
+    # api - resource
     account = domain_account.account
     resource = hal()
     resource._l('self', api_url(
@@ -315,76 +175,50 @@ def _get_domain_account_resource(domain_account):
     resource._k('email', account.email)
     resource._k('role', domain_account.role)
     resource._k('active', domain_account.active)
-
     return resource.document
 
-
 def post_access_request(account, data):
-    try:
-        domain = Domain.query.filter_by(name=data.get('domain')).one()
-    except orm_exc.NoResultFound:
-        json_abort(404, {'error': 'Domain not found.'})
+    # api
     # TODO validation
-    access_request = DomainAccessRequest(
-        account_id=account['account_id'],
-        domain_id=domain.domain_id,
-        creation_date=dtm.utcnow(),
-        status="pending",
-        data={
-            'message': data.get('message'),
-            'fields': data.get('fields'),
-        },
-    )
-    db.session.add(access_request)
-    try:
-        db.session.flush()
-    except sql_exc.IntegrityError:
-        db.session.rollback()
-        json_abort(409, {'error': "Recent access request already exists."})
+    fnc = lambda: domain_srv.create_access_request(account, data)
+    domain = run_or_abort(fnc)
     rv = hal()
-    location = api_url(
-        'api.get_access_request', domain_id=domain.domain_id)
+    location = api_url('api.get_access_request', domain_id=domain.domain_id)
     rv._l('location', location)
     return rv.document, 201, [('Location', location)]
 
-
-
 def get_access_request(domain_id, account):
-    try:
-        access_request = DomainAccessRequest.query.filter_by(
-            domain_id=domain_id, account_id=account['account_id']).one()
-    except orm_exc.NoResultFound:
-        json_abort(404, {'error': 'Access request not found.'})
-    except orm_exc.MultipleResultsFound:
-        json_abort(409, {'error': 'Multiple access requests found.'})
-
+    # api
+    fnc = lambda: domain_srv.get_access_request_by_account(domain_id, account)
+    access_request = run_or_abort(fnc)
     rv = hal()
-    rv._l('self', api_url('api.get_access_request',
-                          domain_id=domain_id))
+    rv._l('self', api_url('api.get_access_request', domain_id=domain_id))
     rv._k('status', access_request.status)
     rv._k('data', access_request.data)
     rv._k('created', access_request.creation_date)
     return rv.document, 200, []
 
-
-
 def get_domain_access_requests(domain, lang):
+    # api
+    fnc = lambda: domain_srv.get_domain_access_requests(domain, lang)
+    access_requests = run_or_abort(fnc)
+    access_request_resources = [_get_domain_access_request_resources(record, lang)
+                                for record in access_requests]
     rv = hal()
-    access_requests = DomainAccessRequest.query.filter_by(
-        domain_id=domain.domain_id).all()
     rv._l('self', api_url('api.get_domain_access_requests'))
     rv._l('domain', api_url('api.get_domain', domain_name=domain.name))
-    rv._embed('access_requests', [_get_domain_access_request_resources(
-        record, lang) for record in access_requests])
+    rv._embed('access_requests', access_request_resources)
     return rv.document, 200, []
 
-
 def get_domain_access_request(access_request_id, lang):
-    access_request = _get_access_request(access_request_id)
+    # api
+    fnc = lambda: domain_srv.get_access_request_by_id(access_request_id)
+    access_request = run_or_abort(fnc)
     document = _get_domain_access_request_resources(access_request, lang)
     return document, 200, []
 
 def _get_domain_access_request_resources(access_request, lang):
+    # api - resource
     rv = hal()
     rv._l('self', api_url(
         'api.get_domain_access_request', access_request_id=clean_uuid(
@@ -394,29 +228,21 @@ def _get_domain_access_request_resources(access_request, lang):
     rv._k('creation_date', access_request.creation_date)
     rv._k('message', access_request.data.get('message'))
     account = access_request.account
-
-    account_data = delocalize_data(
-        account.data, account.localized_fields, lang)
-    account_resource = dict(
-        account_id = account.account_id,
-        name = account.name,
-        email = account.primary_email and account.primary_email.email,
-    )
+    account_data = delocalize_data(account.data, account.localized_fields, lang)
+    account_resource = {
+        "account_id": account.account_id,
+        "name": account.name,
+        "email": account.primary_email and account.primary_email.email, }
     account_resource.update({
         f: account_data.get(f) for f in access_request.data.get('fields', [])
     })
     rv._k('account', account_resource)
     return rv.document
 
-def _get_access_request(access_request_id):
-    try:
-        return DomainAccessRequest.query.filter_by(
-            access_request_id=access_request_id).one()
-    except orm_exc.NoResultFound:
-        json_abort(404, {'error': 'Access request not found'})
-
 def patch_domain_access_request(access_request_id, data):
+    # api
     # TODO: validation
-    access_request = _get_access_request(access_request_id)
-    access_request.status = data.get('status')
+    fnc = lambda: domain_srv.update_access_request_status(
+            access_request_id, data.get('status'))
+    run_or_abort(fnc)
     return {}, 200, []

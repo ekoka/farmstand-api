@@ -1,6 +1,6 @@
 from ..utils.uuid import clean_uuid
-from .routes.routing import api_url
 from ..service import product_fields as fld_srv
+from .routes.routing import api_url
 from .utils import run_or_abort
 
 def post_field(data, domain, lang):

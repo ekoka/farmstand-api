@@ -2,10 +2,8 @@ import bcrypt
 from vino import errors as vno_err
 from sqlalchemy.orm import exc as orm_exc
 
-from ..db.models.security import CommonWord as Word
-
-
 def dictionary_match(data, state):
+    from ..db.models.security import CommonWord as Word
     try:
         q = Word.query.filter_by(word=data)
         q.one()

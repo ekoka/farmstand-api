@@ -1,20 +1,6 @@
-from flask import g, abort, current_app as app, jsonify, url_for
-from sqlalchemy.orm import exc as orm_exc
-from sqlalchemy import exc as sql_exc
-from vino import errors as vno_err
-import slugify
-from datetime import datetime as dtm, timedelta
-from functools import reduce
-
-from ..db.models.domains import Domain
-from ..db.models.billing import Plan, Billable
-from ..db.models.accounts import PaymentSource
-from ..db import db
-from ..utils.uuid import clean_uuid
-from .routes.routing import api_url, json_abort, hal
-from .utils import localize_data, delocalize_data, StripeContext
-
-from .accounts import _get_account
+from .routes.routing import api_url, hal
+from .utils import run_or_abort
+from ..service import billing as bill_srv
 
 def _plan_resource(p, lang):
     rv = hal()
@@ -29,79 +15,60 @@ def _plan_resource(p, lang):
     return rv.document
 
 def get_plan(plan_id, lang):
-    try:
-        plan = Plan.query.filter_by(plan_id=plan_id).one()
-    except (orm_exc.NoResultFound):
-        json_abort(404, {'error': 'Plan not found.'})
+    # api
+    fnc = lambda: bill_srv.get_plan(plan_id)
+    plan = run_or_abort(fnc)
     return _plan_resource(plan, lang), 200, []
 
 def get_plans(params, lang):
-    plans = Plan.query.all()
-    plans = sorted(plans, key= lambda p: p.data.get('amount', 0))
+    # api
+    fnc = lambda: bill_srv.get_plans()
+    plans = run_or_abort(fnc)
     rv = hal()
     rv._l('self', api_url('api.get_plans'))
     rv._embed('plans', [_plan_resource(p, lang) for p in plans])
     return rv.document, 200, []
 
 def get_usage(access_token, year, month):
+    # api
     # validate month and year
     # calculate month's daily charges
-
     # get all periods usage and associated charges
-
     rv = hal()
     rv._link('self', api_url('api.get_usage'))
 
 def post_payment_source(access_token, data):
-    #TODO: validation
-    # data = payment_source.validate(data)
+    # api
+    account_id = access_token['account_id']
     token = data['token']
-
-    account = _get_account(access_token['account_id'])
-
-    with StripeContext() as ctx:
-        customer = ctx.stripe.Customer.retrieve(account.stripe_customer_id)
-        source = customer.sources.create(source=token['id'])
-        customer.refresh()
-        account.payment_sources.append(PaymentSource(
-            source_id=source.id,
-            data=source,
-            default_source=customer.default_source==source.id,
-        ))
-        db.session.flush()
+    fnc = bill_srv.add_payment_source(account_id, token)
+    run_or_abort(fnc)
     return {}, 200, []
 
 def get_payment_sources(access_token):
-    sources = PaymentSource.query.filter_by(
-        account_id=access_token['account_id']).all()
+    # api
+    account_id = access_token['account_id']
+    fnc = bill_srv.get_payment_sources(account_id)
+    payment_sources = run_or_abort(fnc)
     rv = hal()
     rv._l('self', api_url('api.get_payment_sources'))
     rv._l('payment_source', api_url(
-        'api.delete_payment_source', source_id='{source_id}'), templated=True,
-        unquote=True)
-    rv._k('sources', [_get_source_data(s) for s in sources])
+        'api.delete_payment_source', source_id='{source_id}'),
+          templated=True, unquote=True)
+    rv._k('sources', [_get_payment_source_data(s) for s in payment_sources])
     return rv.document, 200, []
 
-def _get_source_data(source):
-    fields = ['brand', 'last4', 'exp_year', 'exp_month',
-              'address_zip']
+def _get_payment_source_data(source):
+    # api
+    fields = ('brand', 'last4', 'exp_year', 'exp_month', 'address_zip')
     rv = {f: source.data.get(f) for f in fields}
     rv['source_id'] = source.source_id
     rv['default_source'] = source.default_source
     return rv
 
 def delete_payment_source(source_id, access_token):
-    account = _get_account(access_token['account_id'])
-    sources = PaymentSource.query.filter_by(
-        account_id=access_token['account_id']).all()
-
-    with StripeContext() as ctx:
-        customer = ctx.stripe.Customer.retrieve(account.stripe_customer_id)
-        customer.sources.retrieve(source_id).delete()
-        customer.refresh()
-        for s in sources:
-            if s.source_id==source_id:
-                db.session.delete(s)
-            else:
-                s.default_source = s.source_id==customer.default_source
+    # api
+    account_id = access_token['account_id']
+    fnc = lambda: bill_srv.delete_payment_source(account_id, source_id)
+    run_or_abort(fnc)
     return {}, 200, []

@@ -1,11 +1,11 @@
 import simplejson as json
 import copy
 
+from .routes.routing import hal, api_url
+from .utils import run_or_abort
+from .images import img_aspect_ratios
 from ..utils.uuid import clean_uuid
 from ..db.schema import generic as product_schema
-from .routes.routing import hal, api_url
-from .images import img_aspect_ratios
-from .utils import run_or_abort
 
 def _delocalize_product_field(field, lang):
     """

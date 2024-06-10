@@ -1,7 +1,8 @@
 from ..db import db
 from ..db.models.groups import Group, GroupOption
 from ..utils.uuid import clean_uuid
-from ..db.data_utils.products import _localize_data, _merge_localized_data
+#from ..db.data_utils.products import _localize_data, _merge_localized_data
+from .product_utils import _localize_data, _merge_localized_data
 
 from . import errors as err
 

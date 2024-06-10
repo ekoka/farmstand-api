@@ -68,6 +68,7 @@ import stripe
 from ..db.models.meta import Field
 from ..db import db
 from .routes.routing import json_abort
+from ..service import errors as srv_err
 
 def _localized_field(field, lang):
     rv = dict(**field)
@@ -324,7 +325,6 @@ def run_or_abort(fnc):
     Receive and call a function that delegates to a service. If a ServiceError is raised,
     reraises it as a JSON response.
     """
-    from .service import errors as srv_err
     try:
         return fnc()
     except srv_err.ServiceError as e:

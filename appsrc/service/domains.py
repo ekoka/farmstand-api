@@ -3,14 +3,14 @@ from flask import current_app as app
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 
-from ...db.models.domains import Domain, DomainAccount, DomainAccessRequest
-from ...db.models.accounts import Account
-from ...db.models.billing import Plan
-from ...db import db
-from ...db.models.reserved_words import reserved_words
-from ..utils import localize_data, delocalize_data, StripeContext
-from .accounts import get_account
 from . import errors as err
+from .utils import localize_data, delocalize_data, StripeContext
+from .accounts import get_account
+from ..db.models.domains import Domain, DomainAccount, DomainAccessRequest
+from ..db.models.accounts import Account
+from ..db.models.billing import Plan
+from ..db import db
+from ..db.models.reserved_words import reserved_words
 
 def get_plan(plan_id):
     # service
@@ -29,8 +29,10 @@ def create_domain(data, access_token, lang):
     account = get_account(access_token['account_id'])
     try:
         name = data.pop('name')
-    except KeyError
+    except KeyError:
         raise err.FormatError('Missing catalog identifier')
+    if name in reserved_words:
+        raise err.NotAuthorized('Unavailable domain name')
     plan = get_plan(plan_id=data.pop('plan_id', None))
     if not account.stripe_customer_id:
         raise err.NotAuthorized('Account does not have a linked Stripe account')
@@ -39,13 +41,15 @@ def create_domain(data, access_token, lang):
     month_after_trial = trial_end_date.replace(day=28) + timedelta(days=4)
     #next_month = dtm.now().replace(day=28) + timedelta(days=4)
     billing_cycle_anchor = int(month_after_trial.replace(day=1).timestamp())
+
+    def duplicate_nicknames_handler(*a, **kw):
+        raise err.Conflict(
+            'The chosen catalog nickname is already taken, try a different one.')
     try:
         with StripeContext() as ctx:
-            duplicate_nicknames = lambda *a,**kw: raise err.Conflict(
-                'The chosen catalog nickname is already taken, try a different one.')
             ctx.register_handler(
                 error_type=sql_exc.IntegrityError,
-                handler=duplicate_nicknames,)
+                handler=duplicate_nicknames_handler,)
             # name the domain
             domain = Domain(name=name)
             # link to account
@@ -82,10 +86,8 @@ def create_domain(data, access_token, lang):
             da.role = 'admin'
             da.active = True
             db.session.flush()
-    except err.Conflict:
-        raise
-    except:
-        raise err.FormatError()
+    except err.Conflict: raise
+    except: raise err.FormatError()
     return domain
 
 def get_domains(access_token, lang):
@@ -132,7 +134,7 @@ def update_domain(domain_name, data, lang):
 def check_domain_name(name):
     # service
     if name in reserved_words:
-        raise err.NotAuthorized('The name is not available')
+        raise err.NotAuthorized('Unavailable domain name')
     try:
         return Domain.query.filter(Domain.name==name).one()
     except orm_exc.NoResultFound as e:

@@ -65,9 +65,9 @@ My advice is to keep things as flat and simple as reasonably possible.
 from copy import deepcopy
 import stripe
 
+from . import errors as err
 from ..db.models.meta import Field
 from ..db import db
-from .routes.routing import json_abort
 
 def _localized_field(field, lang):
     rv = dict(**field)
@@ -337,14 +337,13 @@ class StripeContext:
             if self.handlers.get(e_type):
                 self.handlers[e_type](e_value, traceback)
             elif e_type==stripe.error.CardError:
-                msg = err.get('message', 'Problem with payment method')
                 code = e_value.http_status
-                json_abort(code, {'error': msg})
+                msg = e_value.get('message', 'Problem with payment method')
+                raise err.ServiceError(code, msg)
             #elif e_type==stripe.error.RateLimitError:
             #elif e_type==stripe.error.InvalidRequestError:
             #elif e_type==stripe.error.AuthenticationError:
             #elif e_type==stripe.error.APIConnectionError:
             #elif e_type==stripe.error.StripeError:
             else:
-                raise
-                json_abort(400, {'error': 'Could not process request'})
+                raise err.FormatError(400, 'Could not process request')

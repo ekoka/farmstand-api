@@ -5,17 +5,16 @@ from flask import current_app as app
 from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from datetime import datetime, timedelta
-import json
-from urllib import parse
-
-from ...db.models.accounts import Account, AccountEmail, Signin
-from ...db.models.domains import Domain
-from ...db import db
-from ...utils.uuid import clean_uuid
-from ..routes.routing import api_url
-from ..utils import localize_data
+#import json
+#from urllib import parse
 
 from . import errors as err
+from .utils import localize_data
+from ..db.models.accounts import Account, AccountEmail, Signin
+from ..db.models.domains import Domain
+from ..db import db
+from ..utils.uuid import clean_uuid
+from ..api.routes.routing import api_url
 
 def generate_key(length=24):
     # service

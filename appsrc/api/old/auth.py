@@ -1,19 +1,22 @@
+import functools
+from flask import current_app as app
 from sqlalchemy import exc as sql_exc
+from sqlalchemy.orm import exc as orm_exc
 
 #from .validation import signins as val
-from . import errors as err
+from .routes.routing import hal, json_abort
 from ..utils.randomstr import randomstr
 from ..db import db
 from ..db.models.accounts import Account, Signin
 
-def create_signin(data):
+def post_signin(data):
     # TODO: validation
     # data = val.new_signin.validate(data)
     email = data.pop('email')
     # verify if an account has been created with that email in the past
     account = Account.query.filter_by(email=email).first()
     if not account:
-        raise err.NotFound('No account associated with this e-mail.')
+        json_abort(404, {'error': 'No account associated with this e-mail.'})
     # if account has been created create a Signin record.
     # A task queue will send an email to the address with an access code.
     # When access code is used, account will be confirmed if it isn't yet.
@@ -30,5 +33,8 @@ def create_signin(data):
         db.session.flush()
     except sql_exc.IntegrityError as e:
         db.session.rollback()
-        raise err.FormatError('Could not create sign-in record.')
-    return signin
+    except:
+        db.session.rollback()
+        json_abort(400, {'error': 'Problem creating Signin.'})
+
+    return {}, 200, []
