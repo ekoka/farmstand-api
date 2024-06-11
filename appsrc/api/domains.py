@@ -1,3 +1,5 @@
+from flask import current_app as app
+
 from .routes.routing import api_url, hal
 from .utils import delocalize_data, run_or_abort
 from ..db.models.domains import Domain
@@ -113,38 +115,31 @@ def _get_domain_resource(domain, lang):
 
 def get_domain(domain_name, lang):
     # api
-    fnc = lambda: domain_srv.get_domain(domain_name)
-    domain = run_or_abort(fnc)
+    domain = run_or_abort(lambda: domain_srv.get_domain(domain_name))
     return _get_domain_resource(domain, lang), 200, []
 
 def put_domain(domain_name, data, lang):
     # api
     # TODO: validation
-    fnc = lambda: domain_srv.update_domain(domain_name, data, lang)
-    run_or_abort(fnc)
+    run_or_abort(lambda: domain_srv.update_domain(domain_name, data, lang))
     return {}, 200, []
 
 def get_domain_name_check(params):
     # api
-    name = params.get('q')
-    try:
-        domain_srv.check_domain_name(name)
-        return {}, 200, []
-    except srv_err.ServiceError as e:
-        return {}, e.code, []
+    domain_name = params.get('q')
+    run_or_abort(lambda: domain_srv.check_domain_name(domain_name))
+    return {}, 200, []
 
 def post_domain_account(data, domain):
     # api
     # TODO validation
     # TODO: add a routine for user to approve the domain they're being added to
-    fnc = lambda: domain_srv.create_domain_account(data, domain)
-    run_or_abort(fnc)
+    run_or_abort(lambda: domain_srv.create_domain_account(data, domain))
     return {}, 200, []
 
 def delete_domain_account(account_id, domain):
     # api
-    fnc = lambda: domain_srv.delete_domain_account(account_id, domain)
-    run_or_abort(fnc)
+    run_or_abort(lambda: domain_srv.delete_domain_account(account_id, domain))
     return {}, 200, []
 
 def get_domain_accounts(domain, params):

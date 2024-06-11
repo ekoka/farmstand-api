@@ -5,10 +5,10 @@ from sqlalchemy.orm import exc as orm_exc
 from werkzeug.utils import secure_filename
 from libthumbor import CryptoURL
 
+from . import errors as err
+from .validation import images as vld
 from ..db import db
 from ..db.models import images as img
-from .validation import images as validators
-from . import errors as err
 
 imgcnf = lambda: app.config.IMAGE
 
@@ -42,7 +42,7 @@ def generate_main_copy(source_record):
     # service
     config = imgcnf()
     main_record = None
-    try
+    try:
         # First, try returning existing copy.
         main_record = get_main_image_record(source_record)
         _ = load_image_from_filepath(main_record.meta.get('filepath')) # Check file exists.
@@ -116,7 +116,7 @@ def _filter_aspect_ratios(original_aspect_ratios, original_sizes, params):
     # service
     rv = [original_aspect_ratios, original_sizes]
     try:
-        params = validators.aspect_ratios.validate(params)
+        params = vld.aspect_ratios.validate(params)
     except:
         raise err.FormatError('Invalid aspect ratio or size format')
     try:

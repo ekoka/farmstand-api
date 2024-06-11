@@ -103,14 +103,21 @@ def get_domain_by_name(domain_name):
     try:
         return Domain.query.filter_by(name=domain_name).one()
     except orm_exc.NoResultFound as e:
-        raise err.NotFound('Domain not found')
+        raise err.NotFound(f'Domain {domain_name} not found')
 
 def get_domain(domain_name):
     # service
     try:
         return Domain.query.filter_by(name=domain_name).one()
     except orm_exc.NoResultFound as e:
-        raise err.NotFound('Domain not found')
+        raise err.NotFound(f'Domain {domain_name} not found')
+
+def get_domain_by_id(domain_id):
+    # service
+    try:
+        return Domain.query.filter_by(domain_id=domain_id).one()
+    except orm_exc.NoResultFound as e:
+        raise err.NotFound(f'Domain with ID "{domain_id}" not found')
 
 def update_domain(domain_name, data, lang):
     # service
@@ -131,12 +138,15 @@ def update_domain(domain_name, data, lang):
     except:
         raise err.FormatError('Could not apply changes to domain')
 
-def check_domain_name(name):
-    # service
-    if name in reserved_words:
+def check_domain_name(domain_name):
+    """
+    Raise error if domain doesn't exist or is in list of reserved words raise.
+    Otherwise return domain.
+    """
+    if domain_name in reserved_words:
         raise err.NotAuthorized('Unavailable domain name')
     try:
-        return Domain.query.filter(Domain.name==name).one()
+        return Domain.query.filter(Domain.name==domain_name).one()
     except orm_exc.NoResultFound as e:
         raise err.NotFound('Domain not found')
 

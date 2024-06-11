@@ -5,8 +5,7 @@ from ..service import groups as grp_srv
 from ..utils.uuid import clean_uuid
 
 def get_groups(lang, domain):
-    fnc = lambda: grp_srv.get_groups(domain.domain_id)
-    groups = run_or_abort(fnc)
+    groups = run_or_abort(lambda: grp_srv.get_groups(domain.domain_id))
     rv = hal()
     rv._l('self', api_url('api.get_groups'))
     rv._l(f'{app.config.API_NAMESPACE}:group', api_url(
@@ -17,10 +16,10 @@ def get_groups(lang, domain):
 
 def get_group_resources(params, domain, lang):
     # api
+    # TODO: change field name on UI
     group_ids = params.getlist('fid')
     domain_id = domain.domain_id
-    fnc = lambda: grp_srv.get_group_resources(domain_id, group_ids)
-    groups = run_or_abort(fnc)
+    groups = run_or_abort(lambda: grp_srv.get_groups(domain_id, group_ids))
     rv = hal()
     rv._l('self', api_url('api.get_group_resources'))
     rv._k('group_ids', [grp.group_id for grp in groups])
@@ -30,8 +29,7 @@ def get_group_resources(params, domain, lang):
 # TODO: review
 def post_group(data, lang, domain):
     # api
-    fnc = lambda: grp_srv.create_group(domain.domain_id, data, lang)
-    group = run_or_abort(fnc)
+    group = run_or_abort(grp_srv.create_group(domain.domain_id, data, lang))
     rv = hal()
     location = api_url('api.get_group', group_id=group.group_id)
     rv._l('location', location)
@@ -40,8 +38,7 @@ def post_group(data, lang, domain):
 
 def put_group(group_id, data, lang, domain):
     # api
-    fnc = lambda: grp_srv.update_group(group_id, domain_id, data, lang)
-    run_or_abort(fnc)
+    run_or_abort(lambda: grp_srv.update_group(group_id, domain_id, data, lang))
     return {}, 200, []
 
 def _group_resource(grp, lang,):
@@ -63,15 +60,13 @@ def _group_resource(grp, lang,):
 
 def get_group(group_id, lang, domain):
     # api
-    fnc = lambda: grp_srv.get_group(group_id, domain.domain_id)
-    grp = run_or_abort(fnc)
-    rv = _group_resource(grp, lang)
+    group = run_or_abort(lambda: grp_srv.get_group(group_id, domain.domain_id))
+    rv = _group_resource(group, lang)
     return rv, 200, []
 
 def delete_group(group_id, domain):
     # api
-    fnc = lambda: grp_srv.delete_group(group_id, domain.domain_id)
-    run_or_abort(fnc)
+    run_or_abort(lambda: grp_srv.delete_group(group_id, domain.domain_id))
     return {}, 200, []
 
 def _group_option_resource(group_option, lang):

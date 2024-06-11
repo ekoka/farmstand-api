@@ -30,9 +30,11 @@ def post_id_token(data):
     rv._k('token', account.id_token)
     return rv.document, 200, []
 
-def post_access_token(data, account):
+def post_access_token(account, data):
     # api
-    fnc = lambda: acc_srv.generate_access_token(data, account)
+    # TODO: validate
+    domain_name = data.get('domain')
+    fnc = lambda: acc_srv.generate_access_token(account, domain_name)
     token = run_or_abort(fnc)
     rv = hal()
     rv._l('self', api_url('api.post_access_token'))

@@ -29,7 +29,6 @@ def get_public_root(domain, lang):
     return rv.document, 200, []
 
 def _get_catalog_information(domain, lang):
-    from flask import current_app as app
     data = delocalize_data(domain.data, Domain.localized_fields, lang)
     rv = {
         'domain': domain.name,

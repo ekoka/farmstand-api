@@ -6,15 +6,23 @@ from .product_utils import _localize_data, _merge_localized_data
 
 from . import errors as err
 
-def get_groups(lang, domain):
+def get_group(group_id, domain_id, active=None):
     # service
-    return Group.query.filter_by(domain_id=domain_id).all()
+    q = Group.query.filter_by(group_id=group_id, domain_id=domain_id)
+    if active is not None:
+        q = q.filter(Group.active==active)
+    try:
+        return q.one()
+    except:
+        raise err.NotFound('Group not found')
 
-def get_group_resources(domain_id, group_ids):
+def get_groups(domain_id, group_ids=None, active=None):
     # service
     q = Group.query.filter_by(domain_id=domain_id)
     if group_ids:
         q = q.filter(Group.group_id.in_(group_ids))
+    if active is not None:
+        q = q.filter(Group.active==active)
     return q.all()
 
 # TODO: review
@@ -108,13 +116,6 @@ def update_group(group_id, domain_id, data, lang):
         db.session.rollback()
         raise err.FormatError('Bad format')
     return grp
-
-def get_group(group_id, domain_id):
-    # service
-    try:
-        return Group.query.filter_by(group_id=group_id, domain_id=domain_id).one()
-    except:
-        raise err.NotFound('Group not found')
 
 def delete_group(group_id, domain_id):
     # service

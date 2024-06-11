@@ -319,7 +319,7 @@ def delocalize_data(data, fields, lang):
     return rv
 
 
-def run_or_abort(fnc):
+def run_or_abort(fnc, code=None, msg=None):
     # api - util
     """
     Receive and call a function that delegates to a service. If a ServiceError is raised,
@@ -328,7 +328,12 @@ def run_or_abort(fnc):
     try:
         return fnc()
     except srv_err.ServiceError as e:
-        json_abort(e.code, srv_err.to_dict(e))
+        code = code or e.code
+        msg_dict = {'message': msg} if msg else srv_err.to_dict(e)
+    except:
+        code = code or 400
+        msg_dict = {'message': msg if msg else 'Malformed or missing data'}
+    json_abort(code, msg_dict)
 
 
 class StripeContext:

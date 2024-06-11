@@ -65,31 +65,34 @@ def generate_token(payload):
     jwt_token = jwt.encode(payload, signature, algorithm)
     return jwt_token
 
-def generate_access_token(domain_name, account):
+def generate_access_token(account, domain_name):
     # service
     # default role for account is admin
     role = 'admin'
+    account_id = clean_uuid(account.account_id)
     # is user making claim on a domain
     if domain_name:
         try:
+            # TODO: Use service from the domains module instead
             domain = Domain.query.filter_by(name=domain_name).one()
         except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
-            raise err.NotFound('Domain not found')
+            raise err.FormatError('Invalid domain')
         try:
+            # TODO Move to global space
             from .domains import get_domain_account
             domain_account = get_domain_account(
-                domain_id=domain.domain_id, account_id=account.account_id)
+                domain_id=domain.domain_id, account_id=account_id)
             if domain_account.active:
                 role = domain_account.role or 'user'
         except err.NotFound: pass
     payload = {
-        'account_id': clean_uuid(account.account_id),
-        'account_url': api_url(
-            'api.get_account', account_id=clean_uuid(account.account_id)),
+        'account_id': account_id,
+        'account_url': api_url('api.get_account', account_id=account_id),
         'email': account.email,
         'role': role,
         'domain': domain_name, }
-    return generate_token(payload)
+    rv = generate_token(payload)
+    return rv
 
 def delete_access_token(access_token):
     # service
