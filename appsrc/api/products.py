@@ -1,10 +1,13 @@
 import simplejson as json
 import copy
 
+from flask import current_app as app
+
 from .routes.routing import hal, api_url
 from .utils import run_or_abort
 from .images import _image_resource
 from ..utils.uuid import clean_uuid
+from ..service import products as prod_srv
 from ..db.schema import generic as product_schema
 
 def _delocalize_product_field(field, lang):

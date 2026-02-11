@@ -331,6 +331,7 @@ def run_or_abort(fnc, code=None, msg=None):
         code = code or e.code
         msg_dict = {'message': msg} if msg else srv_err.to_dict(e)
     except:
+        raise
         code = code or 400
         msg_dict = {'message': msg if msg else 'Malformed or missing data'}
     json_abort(code, msg_dict)

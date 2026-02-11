@@ -13,16 +13,15 @@ from ...db.models.accounts import Account
 from ...db.models.domains import Domain, DomainAccount
 from ...utils.jsontools import json_response
 from ...utils.hal import Resource as Hal
+from ...service import accounts as srv_acc, domains as srv_dom
 
 def _check_domain_ownership(domain_name, **kw):
-    from ..accounts import _get_account
-    from ..domains import _get_domain_account
-    account = _get_account(g.access_token['account_id'])
+    account = srv_acc.get_account(g.access_token['account_id'])
     try:
         domain = Domain.query.filter_by(name=domain_name).one()
     except (orm_exc.NoResultFound, orm_exc.MultipleResultsFound):
         json_abort(404, {'error': 'Domain not found.'})
-    domain_account = _get_domain_account(
+    domain_account = srv_dom.get_domain_account(
         domain_id=domain.domain_id, account_id=g.access_token['account_id'])
     return domain_account.active and domain_account.role=='admin'
 

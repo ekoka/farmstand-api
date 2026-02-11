@@ -1,3 +1,5 @@
+from flask import current_app as app
+
 from .product_utils import _delocalize_data
 from .utils import run_or_abort
 from .routes.routing import hal, api_url

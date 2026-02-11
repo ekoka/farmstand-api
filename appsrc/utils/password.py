@@ -1,4 +1,3 @@
-import bcrypt
 from vino import errors as vno_err
 from sqlalchemy.orm import exc as orm_exc
 

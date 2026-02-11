@@ -110,7 +110,7 @@ def recent_products(domain_id, lang, last_product_id=None):
     query = query.format(
         lastproduct_subquery=lastproduct_subquery,
         lastproduct_filter=lastproduct_filter,)
-    return _execute_product_query(query=db.text(query), params=qparams)
+    return execute_product_query(query=db.text(query), params=qparams)
 
 def search_products(domain_id, lang, last_product_id=None, search_query=''):
     # service
@@ -192,7 +192,7 @@ def get_product_by_ids(product_ids, domain_id, lang):
     q = Product.query.filter_by(domain_id=domain_id)
     if product_ids:
         q = q.filter(Product.product_id.in_(product_ids))
-    products = q.all()
+    return q.all()
 
 def get_products_filtered_by_group(domain_id, groups=None):
     # service

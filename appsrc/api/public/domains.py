@@ -3,6 +3,7 @@ from sqlalchemy.orm import exc as orm_exc
 from ...db.models.domains import Domain
 from ..routes.routing import json_abort, hal, api_url
 from ..utils import delocalize_data
+from ...service import domains as dom_srv
 
 #from .validation.products import (add_product, edit_product)
 

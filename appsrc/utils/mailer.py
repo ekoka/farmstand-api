@@ -56,11 +56,18 @@ class Gmail(Mailer):
         conn.starttls()
 
 
+#class Fastmail(Mailer):
+#    SERVER = 'smtp.fastmail.com'
+#    PORT = 465
+#    Connection = smtplib.SMTP_SSL
+
 class Fastmail(Mailer):
     SERVER = 'smtp.fastmail.com'
-    PORT = 465
-    Connection = smtplib.SMTP_SSL
+    PORT = 587
+    Connection = smtplib.SMTP
 
+    def customize(self, conn):
+        conn.starttls()
 
 class Zoho(Mailer):
     SERVER = 'smtp.zoho.com'

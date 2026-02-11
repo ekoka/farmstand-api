@@ -63,6 +63,8 @@ validate them.
 My advice is to keep things as flat and simple as reasonably possible.
 """
 from copy import deepcopy
+
+from flask import url_for, current_app as app
 import stripe
 
 from . import errors as err
@@ -74,6 +76,10 @@ def _localized_field(field, lang):
     if field.get('field_type') in Field.text_types:
         rv['value'] = rv.setdefault('value', {}).get(lang)
     return rv
+
+def api_url(*a, **kw):
+    url = url_for(*a, **kw)
+    return '/'.join([app.config.API_HOST.strip('/'), url.lstrip('/')])
 
 def _localize_fields(data, lang):
     for field, value in data.items():

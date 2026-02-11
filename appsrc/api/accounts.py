@@ -4,7 +4,7 @@ from .validation import accounts as val
 from .routes.routing import hal, json_abort, api_url
 from .utils import delocalize_data, run_or_abort
 from ..db.models.accounts import Account
-from ..service import accounts as acc_srv
+from ..service import accounts as srv_acc
 
 """
 - an access key can only be created by providing an authentication token.
@@ -20,7 +20,7 @@ def post_id_token(data):
     ID Token is the token provided during registration by either the OAuth
     authority or by the API (for email auth, or password auth).
     """
-    fnc = lambda: create_id_token(data)
+    fnc = lambda: srv_acc.create_id_token(data)
     account_email = run_or_abort(fnc)
     account = account_email.account
     rv = hal()
@@ -34,7 +34,7 @@ def post_access_token(account, data):
     # api
     # TODO: validate
     domain_name = data.get('domain')
-    fnc = lambda: acc_srv.generate_access_token(account, domain_name)
+    fnc = lambda: srv_acc.generate_access_token(account, domain_name)
     token = run_or_abort(fnc)
     rv = hal()
     rv._l('self', api_url('api.post_access_token'))
@@ -60,7 +60,7 @@ def get_profile(access_token):
 
 def delete_access_token(access_token):
     # api
-    fnc = lambda: acc_srv.delete_access_token(access_token)
+    fnc = lambda: srv_acc.delete_access_token(access_token)
     run_or_abort(fnc)
     return {}, 200, []
 
@@ -92,7 +92,7 @@ def post_account(data):
     if not token_data:
         json_abort(400, {'error': 'Invalid token'})
     # create account, account_email and id_token
-    fnc = lambda: acc_srv.create_account(token_data)
+    fnc = lambda: srv_acc.create_account(token_data)
     account = run_or_abort(fnc)
     rv = hal()
     rv._l('location', api_url('api.get_account', account_id=account.account_id))
@@ -102,7 +102,7 @@ def post_account(data):
 
 def get_account(account_id, lang):
     # api
-    fnc = lambda: acc_srv.get_account(account_id)
+    fnc = lambda: srv_acc.get_account(account_id)
     acc = run_or_abort(fnc)
     return _get_account_resource(acc, lang=lang), 200, []
 
@@ -134,6 +134,6 @@ def _get_account_resource(account, lang, partial=False):
 def put_account(account_id, data, lang):
     # api
     data = val.edit_account.validate(data)
-    fnc = lambda: acc_srv.update_account(account_id, data, lang)
+    fnc = lambda: srv_acc.update_account(account_id, data, lang)
     run_or_abort(fnc)
     return {}, 200, []

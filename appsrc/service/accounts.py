@@ -9,12 +9,11 @@ from datetime import datetime, timedelta
 #from urllib import parse
 
 from . import errors as err
-from .utils import localize_data
+from .utils import localize_data, api_url
 from ..db.models.accounts import Account, AccountEmail, Signin
 from ..db.models.domains import Domain
 from ..db import db
 from ..utils.uuid import clean_uuid
-from ..api.routes.routing import api_url
 
 def generate_key(length=24):
     # service
