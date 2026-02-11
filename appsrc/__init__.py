@@ -37,7 +37,6 @@ def make_app(config_obj):
         import_name=__name__, static_folder='../static',
         static_url_path='/static', )
     app.config.from_object(config_obj)
-    dramatiq.flask_app = app
 
     def get_locale():
         return getattr(g, 'lang', app.config.DEFAULT_LANG)
@@ -106,7 +105,7 @@ def make_app(config_obj):
         except:
             db.session.rollback()
 
-    if app.config.DEBUG:
+    if app.config.LOGGING_PATH:
         enable_file_logging(app)
 
     # app initialization completed, broadcast
@@ -115,17 +114,11 @@ def make_app(config_obj):
 
 def enable_file_logging(app):
     path = app.config.LOGGING_PATH
-
-    #class DebugFileHandler(logging.FileHandler):
-    #    def emit(self, record):
-    #        if app.debug and app.logger.level==logging.DEBUG:
-    #            super(DebugFileHandler, self).emit(record)
-    #app.logger.addHandler(DebugFileHandler(path))
-
-    fh = logging.FileHandler(path)
-    app.logger.addHandler(fh)
-    app.logger.setLevel(logging.DEBUG)
-
+    handler = logging.FileHandler(path)
+    app.logger.addHandler(handler)
+    @app.errorhandler(500)
+    def log_error(error):
+        app.logger.error(error)
 
 def get_domain(request):
     domain = current_app.config['SERVER_DOMAIN']

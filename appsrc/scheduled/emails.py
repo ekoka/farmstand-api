@@ -1,16 +1,20 @@
-import dramatiq
-from datetime import datetime
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 import os
+from datetime import datetime
 
-from ..db.models.accounts import Signin
-from ..db.models.inquiries import Inquiry
-from ..db import db
-from ..utils.uuid import clean_uuid
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+import dramatiq
+
+from appsrc import make_app
+from appsrc.config import config
+from appsrc.db import db
+from appsrc.db.models.accounts import Signin
+from appsrc.db.models.inquiries import Inquiry
+from appsrc.utils.uuid import clean_uuid
+
+dramatiq.flask_app = make_app(config)
 
 dn = os.path.dirname
-template_path = os.path.join(
-    dn(dn(__file__)), 'scheduled/templates')
+template_path = os.path.join(dn(dn(__file__)), 'scheduled/templates')
 env = Environment(
     loader=FileSystemLoader(template_path),
     autoescape=select_autoescape('html'),)

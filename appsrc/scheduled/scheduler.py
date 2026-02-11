@@ -6,9 +6,7 @@ class Cron:
         self.scheduler = BlockingScheduler()
         
     def crontab(self, job, crontab='* * * * *'): 
-        self.scheduler.add_job(
-            job,
-            CronTrigger.from_crontab(crontab))
+        self.scheduler.add_job(job, CronTrigger.from_crontab(crontab))
 
     def start(self):
         try:

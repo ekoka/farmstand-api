@@ -1,5 +1,3 @@
-from appsrc.config import config
-from appsrc import make_app
-from appsrc import scheduled
+from appsrc.scheduled.emails import dramatiq
 
-app = make_app(config)
+app = dramatiq.flask_app

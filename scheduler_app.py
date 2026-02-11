@@ -1,11 +1,7 @@
-from appsrc import make_app
-from appsrc.config import config
-from appsrc.scheduled import Cron, emails
-
-app = make_app(config)
+from appsrc.scheduled import scheduler, emails
 
 if __name__=='__main__':
-    c = Cron()
+    c = scheduler.Cron()
     c.crontab(job=emails.send_passcode.send)
     c.crontab(job=emails.send_inquiries.send)
     #c.crontab(job=emails.send_password_reset_email.send)
