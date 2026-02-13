@@ -1,11 +1,12 @@
+import re
+import jwt
 import functools
+
 import requests
 from flask import g, request, url_for, current_app as app, jsonify, abort
 from werkzeug import exceptions as werk_exc, Response
 from werkzeug.datastructures import MultiDict
 from sqlalchemy.orm import exc as orm_exc
-import re
-import jwt
 
 from .. import blueprint as bp
 from ...db import db
@@ -419,8 +420,6 @@ def passthrough_view(fnc, passthrough_url):
         return resp.json(), resp.status_code, []
     return wrapper
 
-api_actions = {}
-
 # TODO: temporary until we involve cache, then use jsontools version
 def json_response_wrapper(fnc):
     @functools.wraps(fnc)
@@ -435,6 +434,9 @@ def json_response_wrapper(fnc):
         # we'll assume that only one value was provided
         return json_response(data, status=status, headers=headers)
     return wrapper
+
+
+api_actions = {}
 
 def route(
     url_pattern, methods=None, domained=True, expects_data=False,

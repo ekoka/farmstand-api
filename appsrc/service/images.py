@@ -26,10 +26,14 @@ def get_main_image_record(source_record):
     """
     Fetch main image record if exists.
     """
-    try:
-        return next(c for c in source_record.copies if c.name=='main')
-    except StopIteration:
-        raise err.NotFound('Main image not found')
+    #try:
+    #    return next(c for c in source_record.copies if c.name=='main')
+    #except StopIteration:
+    #    raise err.NotFound('Main image not found')
+    for c in source_record.copies:
+        if c.name=='main':
+            return c
+    raise err.NotFound('Main image not found')
 
 def delete_image_record(record):
     # delete file
