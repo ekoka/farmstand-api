@@ -27,7 +27,6 @@ def get_root():
     rv._l(f'{app.config.API_NAMESPACE}:domain_host_template', app.config[
         'SUBDOMAIN_HOST_TEMPLATE'], templated=True, unquote=True)
     rv._l(f'{app.config.API_NAMESPACE}:api_host', app.config['API_HOST'])
-    rv._l(f'{app.config.API_NAMESPACE}:account_host', app.config['ACCOUNT_HOST'])
     rv._l(f'{app.config.API_NAMESPACE}:access_requests',
           api_url('api.post_access_request'))
     rv._l(f'{app.config.API_NAMESPACE}:access_request', api_url(

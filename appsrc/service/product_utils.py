@@ -87,19 +87,22 @@ def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
     # encapsulated by a root object {} in this application.
 
     # getting to the leaf
-    for k in validkeys[1:]:
+    #for k in validkeys[1:]:
+    #    leaf = leaf[k]
+    for i in range(1, len(validkeys)):
+        k = validkeys[i]
         leaf = leaf[k]
 
     # test if the new key is valid with the resolved leaf
     try:
         if ordered_dict:
-            try:
-                return [index for index,l in enumerate(leaf)
-                        if l.get('name')==key][0]
-            except IndexError:
-                raise KeyError
+            #return [i for i,l in enumerate(leaf) if l.get('name')==key][0]
+            for i,l in enumerate(leaf):
+                if l.get('name')==key:
+                    return i
+            raise KeyError
         else:
-            leaf = leaf[key]
+            leaf[key]
             return True
     except TypeError:
         # the type of the field is not consistent with the key
@@ -110,16 +113,20 @@ def validatekey(record, key, validkeys, ordered_dict=False, strict_keys=False):
         if not strict_keys:
             # non-existing keys are allowed.
             # return None to signal that it's the case here.
-            return
+            return None
         # in case only existing keys and indices are allowed
         raise Mismatch('Non-existing key')
 
 
 def appendobj(record, keymap, obj):
     # first get the base field
-    leaf = field = getattr(record, keymap[0])
+    leaf = getattr(record, keymap[0])
+
     # then, navigate to the last item right before the key
-    for k in keymap[1:]:
+    #for k in keymap[1:]:
+    #    leaf = leaf[k]
+    for i in range(1, len(keymap)):
+        k = keymap[i]
         leaf = leaf[k]
     leaf.append(obj)
 
@@ -185,7 +192,7 @@ def patch_record(record, data, keymap=None):
             # recursively try to assign the value to it
             patch_record(record, v, keymap)
             # the value has now been assigned, pop the key
-            keymap.pop(-1)
+            keymap.pop()
     except AttributeError: # data is not a dict
         try: # Second, try to treat data as a string or a list of named objects.
 
@@ -228,7 +235,7 @@ def patch_record(record, data, keymap=None):
                 # recursive patching
                 patch_record(record, obj, keymap)
                 # value has been assigned, pop and move on.
-                keymap.pop(-1)
+                keymap.pop()
 
             # iteration on object list completed properly, turn off the flag.
             objlist = False

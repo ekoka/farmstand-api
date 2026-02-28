@@ -148,7 +148,7 @@ def get_domain_accounts(domain, params):
     accounts = run_or_abort(fnc)
     rv = hal()
     rv._l('self', api_url('api.get_domain_accounts'))
-    rv._embed('accounts', [_get_domain_account_resource(a) for a in accounts])
+    rv._embed('accounts', [get_domain_account_resource(a) for a in accounts])
     return rv.document, 200, []
 
 def get_domain_account(domain, account_id):

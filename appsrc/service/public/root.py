@@ -24,7 +24,6 @@ def get_public_root(domain, lang):
     rv._l(f'{app.config.API_NAMESPACE}:domain_host_template', app.config.SUBDOMAIN_HOST_TEMPLATE,
           templated=True, unquote=True)
     rv._l(f'{app.config.API_NAMESPACE}:api_host', app.config.API_HOST)
-    rv._l(f'{app.config.API_NAMESPACE}:account_host', app.config.ACCOUNT_HOST)
     rv._k('catalog', _get_catalog_information(domain, lang))
     return rv.document, 200, []
 

@@ -74,7 +74,6 @@ SERVER_DOMAIN = env.string('SERVER_DOMAIN')
 # used in root resources
 API_HOST = env.string('API_HOST')
 SUBDOMAIN_HOST_TEMPLATE = env.string('SUBDOMAIN_HOST_TEMPLATE')
-ACCOUNT_HOST = env.string('ACCOUNT_HOST')
 
 DEV_MODE = env.boolean('DEV_MODE')
 DEBUG = env.boolean('DEBUG')

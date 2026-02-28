@@ -14,6 +14,7 @@ def get_groups(lang, domain):
         'api.get_group', group_id='{group_id}'), templated=True, unquote=True)
     rv._l(f'{app.config.API_NAMESPACE}:group_resources', api_url('api.get_group_resources'))
     rv._k('group_ids', [grp.group_id for grp in groups])
+    app.logger.info(rv.document)
     return rv.document, 200, []
 
 def get_group_resources(params, domain, lang):
@@ -40,7 +41,7 @@ def post_group(data, lang, domain):
 
 def put_group(group_id, data, lang, domain):
     # api
-    run_or_abort(lambda: grp_srv.update_group(group_id, domain_id, data, lang))
+    run_or_abort(lambda: grp_srv.update_group(group_id, domain.domain_id, data, lang))
     return {}, 200, []
 
 def _group_resource(grp, lang,):

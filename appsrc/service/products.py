@@ -6,6 +6,7 @@ from sqlalchemy.orm import exc as orm_exc
 from sqlalchemy import exc as sql_exc
 from vino import errors as vno_err
 
+from . import errors as err
 from ..db import db
 from ..db.models.products import Product, ProductSchema
 from ..db.models.groups import GroupOption, ProductGroupOption
@@ -63,6 +64,7 @@ def localized_product_fields(fields, lang):
     """
     Build and return localized version of fields, i.e. add a lang context.
     """
+    app.logger.info(fields)
     rv = []
     for f in fields:
         new_f = copy.deepcopy(f)
@@ -73,7 +75,7 @@ def localized_product_fields(fields, lang):
         rv.append(new_f)
     return rv
 
-def recent_products(domain_id, lang, last_product_id=None):
+def recent_products(domain, lang, last_product_id=None):
     # service
     limit = 100
     #q = db.session.query(Product.product_id).filter_by(domain_id=domain_id)
@@ -89,7 +91,7 @@ def recent_products(domain_id, lang, last_product_id=None):
     '''
     qparams = dict(
         limit=limit,
-        domain_id=domain_id,)
+        domain_id=domain.domain_id,)
     lastproduct_filter = lastproduct_subquery = ''
     if last_product_id:
         qparams['last_product_id'] = last_product_id
@@ -112,12 +114,12 @@ def recent_products(domain_id, lang, last_product_id=None):
         lastproduct_filter=lastproduct_filter,)
     return execute_product_query(query=db.text(query), params=qparams)
 
-def search_products(domain_id, lang, last_product_id=None, search_query=''):
+def search_products(domain, lang, last_product_id=None, search_query=''):
     # service
     limit = 100
     language = app.config['LOCALES'].get(lang,{}).get('language', 'simple')
     qparams = dict(
-        domain_id=domain_id,
+        domain_id=domain.domain_id,
         language=language,
         limit=limit,)
     statement = """
@@ -306,7 +308,7 @@ def create_product(data, lang):
 def update_product(product_id, data, domain_id, lang):
     # service
     data = edit_product.validate(data)
-    p = prod_srv.get_product(product_id, domain_id)
+    p = get_product(product_id, domain_id)
     p.updated_ts = dtm.utcnow()
     populate_product(p, data, lang)
     db_flush()
@@ -369,12 +371,14 @@ def patch_product(product_id, domain_id, data, lang):
     #data = edit_product_members.validate(data)
     p = get_product(product_id, domain_id)
     try:
-        data['fields'] = localized_product_fields(data['fields'], lang)
-    except (ValueError, AttributeError, TypeError):
+        data['fields']['fields'] = localized_product_fields(data['fields']['fields'], lang)
+    except (ValueError, AttributeError, TypeError) as e:
+        raise e
         raise err.FormatError('Could not patch product fields')
+
     try:
         patch_record(p, data)
-    except Mismatch:
+    except Mismatch as e:
         db.session.rollback()
         raise err.FormatError('Could not patch product data')
     db_flush()
@@ -383,7 +387,7 @@ def patch_product(product_id, domain_id, data, lang):
 def delete_product(product_id):
     # service
     try:
-        p = prod_srv.get_product(product_id)
+        p = get_product(product_id)
         db.session.delete(p)
         db.session.flush()
         #.products.delete().where(
